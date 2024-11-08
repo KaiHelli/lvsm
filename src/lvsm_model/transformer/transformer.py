@@ -1,7 +1,7 @@
 import torch
 from .encoder import TransformerEncoder
 from .decoder import TransformerDecoder
-from ..dataset.types import DataShim
+from src.dataset.types import DataShim
 
 
 class Transformer(torch.nn.Module):

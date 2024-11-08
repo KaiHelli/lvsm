@@ -5,7 +5,7 @@ import os
 from unittest.mock import patch
 from packaging.version import parse as parse_version
 
-from src.lvsm_model.multi_head_attention import MultiHeadAttention
+from lvsm_model.transformer.multi_head_attention import MultiHeadAttention
 
 try:
     from flash_attn.flash_attn_interface import (

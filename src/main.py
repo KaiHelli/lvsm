@@ -28,7 +28,7 @@ with install_import_hook(
     from src.misc.step_tracker import StepTracker
     from src.misc.wandb_tools import update_checkpoint_path
     from src.lvsm_model.model_wrapper import ModelWrapper
-    from src.lvsm_model.transformer import Transformer
+    from lvsm_model.transformer import Transformer
 
 
 def cyan(text: str) -> str:

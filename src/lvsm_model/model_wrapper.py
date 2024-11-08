@@ -111,7 +111,7 @@ class ModelWrapper(LightningModule):
         #    self.time_skip_steps_dict = {"encoder": 0, "decoder": 0}
 
     def training_step(self, batch, batch_idx):
-        # batch: BatchedExample = self.data_shim(batch)
+        batch: BatchedExample = self.data_shim(batch)
         _, _, _, h, w = batch["target"]["image"].shape
 
         # Run the model.
@@ -254,6 +254,8 @@ class ModelWrapper(LightningModule):
 
     @rank_zero_only
     def validation_step(self, batch, batch_idx):
+        return
+    
         batch: BatchedExample = self.data_shim(batch)
 
         if self.global_rank == 0:

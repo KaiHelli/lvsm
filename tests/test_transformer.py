@@ -5,7 +5,7 @@ import sys
 import os
 from unittest.mock import patch
 
-from src.lvsm_model.transformer import Transformer
+from lvsm_model.transformer import Transformer
 
 
 @pytest.fixture
