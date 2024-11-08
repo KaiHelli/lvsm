@@ -2,7 +2,6 @@
 
 defaults:
   - override /dataset: re10k
-  - override /model/encoder: costvolume
   - override /loss: [mse, lpips]
 
 wandb:
@@ -15,18 +14,6 @@ data_loader:
 
 trainer:
   max_steps: 300_001
-
-# ----- Additional params for default best model customization
-model:
-  encoder:
-    num_depth_candidates: 128
-    costvolume_unet_feat_dim: 128
-    costvolume_unet_channel_mult: [1,1,1]
-    costvolume_unet_attn_res: [4]
-    gaussians_per_pixel: 1
-    depth_unet_feat_dim: 32
-    depth_unet_attn_res: [16]
-    depth_unet_channel_mult: [1,1,1,1,1]
 
 # lpips loss
 loss:

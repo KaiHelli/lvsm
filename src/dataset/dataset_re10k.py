@@ -70,9 +70,7 @@ class DatasetRE10k(IterableDataset):
         self.chunks = []
         for root in cfg.roots:
             root = root / self.data_stage
-            root_chunks = sorted(
-                [path for path in root.iterdir() if path.suffix == ".torch"]
-            )
+            root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch"])
             self.chunks.extend(root_chunks)
         if self.cfg.overfit_to_scene is not None:
             chunk_path = self.index[self.cfg.overfit_to_scene]
@@ -143,13 +141,9 @@ class DatasetRE10k(IterableDataset):
                     continue
 
                 # Load the images.
-                context_images = [
-                    example["images"][index.item()] for index in context_indices
-                ]
+                context_images = [example["images"][index.item()] for index in context_indices]
                 context_images = self.convert_images(context_images)
-                target_images = [
-                    example["images"][index.item()] for index in target_indices
-                ]
+                target_images = [example["images"][index.item()] for index in target_indices]
                 target_images = self.convert_images(target_images)
 
                 # Skip the example if the images don't have the right shape.
@@ -169,10 +163,7 @@ class DatasetRE10k(IterableDataset):
                     a, b = context_extrinsics[:, :3, 3]
                     scale = (a - b).norm()
                     if scale < self.cfg.baseline_epsilon:
-                        print(
-                            f"Skipped {scene} because of insufficient baseline "
-                            f"{scale:.6f}"
-                        )
+                        print(f"Skipped {scene} because of insufficient baseline " f"{scale:.6f}")
                         continue
                     extrinsics[:, :3, 3] /= scale
                 else:
@@ -273,8 +264,10 @@ class DatasetRE10k(IterableDataset):
 
     def __len__(self) -> int:
         return (
-            min(len(self.index.keys()) *
-                self.cfg.test_times_per_scene, self.cfg.test_len)
+            min(
+                len(self.index.keys()) * self.cfg.test_times_per_scene,
+                self.cfg.test_len,
+            )
             if self.stage == "test" and self.cfg.test_len > 0
             else len(self.index.keys()) * self.cfg.test_times_per_scene
         )

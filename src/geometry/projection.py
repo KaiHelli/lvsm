@@ -80,9 +80,7 @@ def unproject(
 
     # Apply the inverse intrinsics to the coordinates.
     coordinates = homogenize_points(coordinates)
-    ray_directions = einsum(
-        intrinsics.inverse(), coordinates, "... i j, ... j -> ... i"
-    )
+    ray_directions = einsum(intrinsics.inverse(), coordinates, "... i j, ... j -> ... i")
 
     # Apply the supplied depth values.
     return ray_directions * z[..., None]

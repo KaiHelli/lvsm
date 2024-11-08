@@ -22,6 +22,11 @@ class BatchedViews(TypedDict, total=False):
     index: Int64[Tensor, "batch _"]  # batch view
 
 
+class BatchedViewsRGBD(TypedDict, total=False):
+    color: Float[Tensor, "batch view 3 height width"]
+    depth: Float[Tensor, "batch view height width"] | None
+
+
 class BatchedExample(TypedDict, total=False):
     target: BatchedViews
     context: BatchedViews

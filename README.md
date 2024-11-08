@@ -1,48 +1,17 @@
-<p align="center">
-  <h1 align="center">MVSplat: Efficient 3D Gaussian Splatting <br> from Sparse Multi-View Images</h1>
-  <p align="center">
-    <a href="https://donydchen.github.io/">Yuedong Chen</a>
-    &nbsp;·&nbsp;
-    <a href="https://haofeixu.github.io/">Haofei Xu</a>
-    &nbsp;·&nbsp;
-    <a href="https://chuanxiaz.com/">Chuanxia Zheng</a>
-    &nbsp;·&nbsp;
-    <a href="https://bohanzhuang.github.io/">Bohan Zhuang</a> <br>
-    <a href="https://people.inf.ethz.ch/marc.pollefeys/">Marc Pollefeys</a>
-    &nbsp;·&nbsp;
-    <a href="http://www.cvlibs.net/">Andreas Geiger</a>
-    &nbsp;·&nbsp;
-    <a href="https://personal.ntu.edu.sg/astjcham/">Tat-Jen Cham</a>
-    &nbsp;·&nbsp;
-    <a href="https://jianfei-cai.github.io/">Jianfei Cai</a>
-  </p>
-  <h3 align="center">ECCV 2024 Oral</h3>
-  <h3 align="center"><a href="https://arxiv.org/abs/2403.14627">Paper</a> | <a href="https://donydchen.github.io/mvsplat/">Project Page</a> | <a href="https://drive.google.com/drive/folders/14_E_5R6ojOWnLSrSVLVEMHnTiKsfddjU">Pretrained Models</a> </h3>
-<!--   <div align="center">
-    <a href="https://news.ycombinator.com/item?id=41222655">
-      <img
-        alt="Featured on Hacker News"
-        src="https://hackerbadge.vercel.app/api?id=41222655&type=dark"
-      />
-    </a>
-  </div> -->
+<h1 align="center">LVSM: A Large View Synthesis Model with<br>Minimal 3D Inductive Bias</h1>
 
-<ul>
-<li><b>21/10/24 Update:</b> Check out Haofei's <a href="https://github.com/cvg/depthsplat">DepthSplat</a> if you are interested in feed-forward 3DGS on more complex scenes (DL3DV-10K) and more input views (up to 12 views)!</li>
-</ul>
-<br>
-</p>
+An unofficial implementation of the multi-view image synthesis architecture proposed in the [LVSM](https://haian-jin.github.io/projects/LVSM/) paper. This implementation may not fully adhere to all original details or guarantee complete accuracy.
 
-https://github.com/donydchen/mvsplat/assets/5866866/c5dc5de1-819e-462f-85a2-815e239d8ff2
+**Caution:** Work in Progress / `README.md` not yet updated / Code non-functional
 
 ## Installation
 
 To get started, clone this project, create a conda virtual environment using Python 3.10+, and install the requirements:
 
 ```bash
-git clone https://github.com/donydchen/mvsplat.git
-cd mvsplat
-conda create -n mvsplat python=3.10
+git clone https://github.com/kaihelli/lvsm.git
+cd lvsm
+conda create -n lvsm python=3.10
 conda activate mvsplat
 pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
 pip install -r requirements.txt
@@ -196,14 +165,17 @@ test.compute_scores=true
 ## BibTeX
 
 ```bibtex
-@article{chen2024mvsplat,
-    title   = {MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images},
-    author  = {Chen, Yuedong and Xu, Haofei and Zheng, Chuanxia and Zhuang, Bohan and Pollefeys, Marc and Geiger, Andreas and Cham, Tat-Jen and Cai, Jianfei},
-    journal = {arXiv preprint arXiv:2403.14627},
-    year    = {2024},
+@misc{jin2024lvsmlargeviewsynthesis,
+      title={LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias}, 
+      author={Haian Jin and Hanwen Jiang and Hao Tan and Kai Zhang and Sai Bi and Tianyuan Zhang and Fujun Luan and Noah Snavely and Zexiang Xu},
+      year={2024},
+      eprint={2410.17242},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2410.17242}, 
 }
 ```
 
 ## Acknowledgements
 
-The project is largely based on [pixelSplat](https://github.com/dcharatan/pixelsplat) and has incorporated numerous code snippets from [UniMatch](https://github.com/autonomousvision/unimatch). Many thanks to these two projects for their excellent contributions!
+This project builds upon the paper [LVSM](https://haian-jin.github.io/projects/LVSM/). The code is largely based on [MVSplat](https://github.com/donydchen/mvsplat). Many thanks to these projects for their excellent contributions!

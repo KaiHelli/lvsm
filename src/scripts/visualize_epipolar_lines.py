@@ -42,9 +42,7 @@ def visualize_epipolar_lines(cfg_dict: DictConfig):
     # dataset = iter(data_module.train_dataloader())
     dataset = iter(data_module.test_dataloader())
 
-    cur_radius = (
-        str(cfg.dataset.view_sampler.index_path.stem).split(".")[0].split("_")[-1]
-    )
+    cur_radius = str(cfg.dataset.view_sampler.index_path.stem).split(".")[0].split("_")[-1]
 
     for e_idx, example in enumerate(dataset):
         # example = next(dataset)
@@ -84,9 +82,7 @@ def visualize_epipolar_lines(cfg_dict: DictConfig):
 
             # Draw the point (ray) onto the source view.
             source_image = example["context"]["image"][0, 0]
-            source_image = draw_points(
-                source_image, xy, (1, 0, 0), 4, x_range=(0, 1), y_range=(0, 1)
-            )
+            source_image = draw_points(source_image, xy, (1, 0, 0), 4, x_range=(0, 1), y_range=(0, 1))
 
             # Draw the epipolar line onto the target view.
             target_image = example["context"]["image"][0, 1]

@@ -5,9 +5,7 @@ from einops import reduce
 from jaxtyping import Float
 from torch import Tensor
 
-from ..dataset.types import BatchedExample
-from ..model.decoder.decoder import DecoderOutput
-from ..model.types import Gaussians
+from ..dataset.types import BatchedExample, BatchedViewsRGBD
 from .loss import Loss
 
 
@@ -26,9 +24,8 @@ class LossDepthCfgWrapper:
 class LossDepth(Loss[LossDepthCfg, LossDepthCfgWrapper]):
     def forward(
         self,
-        prediction: DecoderOutput,
+        prediction: BatchedViewsRGBD,
         batch: BatchedExample,
-        gaussians: Gaussians,
         global_step: int,
     ) -> Float[Tensor, ""]:
         # Scale the depth between the near and far planes.

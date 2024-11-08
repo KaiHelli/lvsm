@@ -7,9 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from .dataset.data_module import DataLoaderCfg, DatasetCfg
 from .loss import LossCfgWrapper
-from .model.decoder import DecoderCfg
-from .model.encoder import EncoderCfg
-from .model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg
+from .lvsm_model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg
 
 
 @dataclass
@@ -23,8 +21,15 @@ class CheckpointingCfg:
 
 @dataclass
 class ModelCfg:
-    decoder: DecoderCfg
-    encoder: EncoderCfg
+    d_model: int
+    d_k: int
+    d_v: int
+    num_heads: int
+    d_ff: int
+    dropout_p: float
+    num_encoder_layers: int
+    num_decoder_layers: int
+    bias: bool
 
 
 @dataclass
@@ -42,7 +47,7 @@ class RootCfg:
     mode: Literal["train", "test"]
     dataset: DatasetCfg
     data_loader: DataLoaderCfg
-    model: ModelCfg
+    lvsm_model: ModelCfg
     optimizer: OptimizerCfg
     checkpointing: CheckpointingCfg
     trainer: TrainerCfg
@@ -78,10 +83,7 @@ def separate_loss_cfg_wrappers(joined: dict) -> list[LossCfgWrapper]:
     class Dummy:
         dummy: LossCfgWrapper
 
-    return [
-        load_typed_config(DictConfig({"dummy": {k: v}}), Dummy).dummy
-        for k, v in joined.items()
-    ]
+    return [load_typed_config(DictConfig({"dummy": {k: v}}), Dummy).dummy for k, v in joined.items()]
 
 
 def load_typed_root_config(cfg: DictConfig) -> RootCfg:

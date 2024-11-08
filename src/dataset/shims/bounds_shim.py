@@ -26,9 +26,7 @@ def compute_depth_for_disparity(
     # Compute a single pixel's size at depth 1.
     h, w = image_shape
     pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=extrinsics.device)
-    pixel_size = einsum(
-        intrinsics[..., :2, :2].inverse(), pixel_size, "... i j, j -> ... i"
-    )
+    pixel_size = einsum(intrinsics[..., :2, :2].inverse(), pixel_size, "... i j, j -> ... i")
 
     # This wouldn't make sense with non-square pixels, but then again, non-square pixels
     # don't make much sense anyway.

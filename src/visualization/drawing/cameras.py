@@ -25,9 +25,7 @@ def draw_cameras(
 
     # Compute scene bounds.
     minima, maxima = compute_aabb(extrinsics, intrinsics, near, far)
-    scene_minima, scene_maxima = compute_equal_aabb_with_margin(
-        minima, maxima, margin=margin
-    )
+    scene_minima, scene_maxima = compute_equal_aabb_with_margin(minima, maxima, margin=margin)
     span = (scene_maxima - scene_minima).max()
 
     # Compute frustum locations.
@@ -54,9 +52,7 @@ def draw_cameras(
             y = points[..., image_y_axis]
             return torch.stack([x, y], dim=-1)
 
-        x_range, y_range = torch.stack(
-            (project(scene_minima), project(scene_maxima)), dim=-1
-        )
+        x_range, y_range = torch.stack((project(scene_minima), project(scene_maxima)), dim=-1)
 
         # Draw near and far planes.
         if near is not None:

@@ -73,9 +73,7 @@ if __name__ == "__main__":
         plt.savefig(path)
 
     for i, angle in enumerate(torch.linspace(0, 2 * torch.pi, 30)):
-        rotation = torch.tensor(
-            R.from_euler("x", angle.item()).as_matrix(), device=device
-        )
+        rotation = torch.tensor(R.from_euler("x", angle.item()).as_matrix(), device=device)
         plot_sh(rotate_sh(coefficients, rotation), Path(f"sh_rotation/{i:0>3}.png"))
 
     print("Done!")

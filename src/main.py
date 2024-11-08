@@ -27,9 +27,8 @@ with install_import_hook(
     from src.misc.LocalLogger import LocalLogger
     from src.misc.step_tracker import StepTracker
     from src.misc.wandb_tools import update_checkpoint_path
-    from src.model.decoder import get_decoder
-    from src.model.encoder import get_encoder
-    from src.model.model_wrapper import ModelWrapper
+    from src.lvsm_model.model_wrapper import ModelWrapper
+    from src.lvsm_model.transformer import Transformer
 
 
 def cyan(text: str) -> str:
@@ -47,9 +46,7 @@ def train(cfg_dict: DictConfig):
 
     # Set up the output directory.
     if cfg_dict.output_dir is None:
-        output_dir = Path(
-            hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]
-        )
+        output_dir = Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"])
     else:  # for resuming
         output_dir = Path(cfg_dict.output_dir)
         os.makedirs(output_dir, exist_ok=True)
@@ -63,8 +60,7 @@ def train(cfg_dict: DictConfig):
     if cfg_dict.wandb.mode != "disabled":
         wandb_extra_kwargs = {}
         if cfg_dict.wandb.id is not None:
-            wandb_extra_kwargs.update({'id': cfg_dict.wandb.id,
-                                       'resume': "must"})
+            wandb_extra_kwargs.update({"id": cfg_dict.wandb.id, "resume": "must"})
         logger = WandbLogger(
             entity=cfg_dict.wandb.entity,
             project=cfg_dict.wandb.project,
@@ -95,7 +91,7 @@ def train(cfg_dict: DictConfig):
         )
     )
     for cb in callbacks:
-        cb.CHECKPOINT_EQUALS_CHAR = '_'
+        cb.CHECKPOINT_EQUALS_CHAR = "_"
 
     # Prepare the checkpoint for loading.
     checkpoint_path = update_checkpoint_path(cfg.checkpointing.load, cfg.wandb)
@@ -105,7 +101,7 @@ def train(cfg_dict: DictConfig):
 
     trainer = Trainer(
         max_epochs=-1,
-        accelerator="gpu",
+        accelerator="gpu" if torch.cuda.is_available() else "auto",
         logger=logger,
         devices="auto",
         num_nodes=cfg.trainer.num_nodes,
@@ -119,23 +115,20 @@ def train(cfg_dict: DictConfig):
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
 
-    encoder, encoder_visualizer = get_encoder(cfg.model.encoder)
+    model = Transformer(**cfg_dict.lvsm_model)
 
     model_kwargs = {
         "optimizer_cfg": cfg.optimizer,
         "test_cfg": cfg.test,
         "train_cfg": cfg.train,
-        "encoder": encoder,
-        "encoder_visualizer": encoder_visualizer,
-        "decoder": get_decoder(cfg.model.decoder, cfg.dataset),
+        "model": model,
         "losses": get_losses(cfg.loss),
         "step_tracker": step_tracker,
     }
     if cfg.mode == "train" and checkpoint_path is not None and not cfg.checkpointing.resume:
         # Just load model weights, without optimizer states
         # e.g., fine-tune from the released weights on other datasets
-        model_wrapper = ModelWrapper.load_from_checkpoint(
-            checkpoint_path, **model_kwargs, strict=True)
+        model_wrapper = ModelWrapper.load_from_checkpoint(checkpoint_path, **model_kwargs, strict=True)
         print(cyan(f"Loaded weigths from {checkpoint_path}."))
     else:
         model_wrapper = ModelWrapper(**model_kwargs)
@@ -148,8 +141,11 @@ def train(cfg_dict: DictConfig):
     )
 
     if cfg.mode == "train":
-        trainer.fit(model_wrapper, datamodule=data_module, ckpt_path=(
-            checkpoint_path if cfg.checkpointing.resume else None))
+        trainer.fit(
+            model_wrapper,
+            datamodule=data_module,
+            ckpt_path=(checkpoint_path if cfg.checkpointing.resume else None),
+        )
     else:
         trainer.test(
             model_wrapper,
@@ -160,6 +156,6 @@ def train(cfg_dict: DictConfig):
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore")
-    torch.set_float32_matmul_precision('high')
+    torch.set_float32_matmul_precision("high")
 
     train()

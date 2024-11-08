@@ -1,0 +1,9 @@
+d_model: 512
+d_k: 64
+d_v: 64
+num_heads: 8
+d_ff: 2048
+dropout_p: 0.1
+num_encoder_layers: 6
+num_decoder_layers: 6
+bias: true

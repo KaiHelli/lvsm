@@ -4,8 +4,8 @@ import argparse
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--index_input', type=str, help='depth directory')
-parser.add_argument('--index_output', type=str, help='dataset directory') 
+parser.add_argument("--index_input", type=str, help="depth directory")
+parser.add_argument("--index_output", type=str, help="dataset directory")
 args = parser.parse_args()
 
 

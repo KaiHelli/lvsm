@@ -6,10 +6,8 @@ from jaxtyping import Float
 from lpips import LPIPS
 from torch import Tensor
 
-from ..dataset.types import BatchedExample
+from ..dataset.types import BatchedExample, BatchedViewsRGBD
 from ..misc.nn_module_tools import convert_to_buffer
-from ..model.decoder.decoder import DecoderOutput
-from ..model.types import Gaussians
 from .loss import Loss
 
 
@@ -35,9 +33,8 @@ class LossLpips(Loss[LossLpipsCfg, LossLpipsCfgWrapper]):
 
     def forward(
         self,
-        prediction: DecoderOutput,
+        prediction: BatchedViewsRGBD,
         batch: BatchedExample,
-        gaussians: Gaussians,
         global_step: int,
     ) -> Float[Tensor, ""]:
         image = batch["target"]["image"]

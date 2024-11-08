@@ -1,8 +1,7 @@
 defaults:
   - dataset: re10k
   - optional dataset/view_sampler_dataset_specific_config: ${dataset/view_sampler}_${dataset}
-  - model/encoder: costvolume
-  - model/decoder: splatting_cuda
+  - lvsm_model: model
   - loss: [mse]
 
 wandb:

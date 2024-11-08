@@ -95,9 +95,7 @@ class EvaluationIndexGenerator(LightningModule):
                     min_overlap = self.cfg.min_overlap
                     max_overlap = self.cfg.max_overlap
                     if min_overlap <= overlap <= max_overlap:
-                        valid_indices.append(
-                            (current_index.item(), overlap_a, overlap_b)
-                        )
+                        valid_indices.append((current_index.item(), overlap_a, overlap_b))
 
                     # Stop once the camera has panned away too much.
                     if overlap < min_overlap or delta > max_distance:
@@ -108,9 +106,7 @@ class EvaluationIndexGenerator(LightningModule):
             if valid_indices:
                 # Pick a random valid view. Index the resulting views.
                 num_options = len(valid_indices)
-                chosen = torch.randint(
-                    0, num_options, size=tuple(), generator=self.generator
-                )
+                chosen = torch.randint(0, num_options, size=tuple(), generator=self.generator)
                 chosen, overlap_a, overlap_b = valid_indices[chosen]
 
                 context_left = min(chosen, context_index.item())
@@ -153,6 +149,4 @@ class EvaluationIndexGenerator(LightningModule):
     def save_index(self) -> None:
         self.cfg.output_path.mkdir(exist_ok=True, parents=True)
         with (self.cfg.output_path / "evaluation_index.json").open("w") as f:
-            json.dump(
-                {k: None if v is None else asdict(v) for k, v in self.index.items()}, f
-            )
+            json.dump({k: None if v is None else asdict(v) for k, v in self.index.items()}, f)

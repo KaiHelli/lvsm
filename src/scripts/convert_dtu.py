@@ -1,6 +1,6 @@
-''' Build upon: https://github.com/dcharatan/real_estate_10k_tools
+""" Build upon: https://github.com/dcharatan/real_estate_10k_tools
                 https://github.com/donydchen/matchnerf/blob/main/datasets/dtu.py 
-    DTU Acquired instruction: https://github.com/donydchen/matchnerf?tab=readme-ov-file#dtu-for-both-training-and-testing'''
+    DTU Acquired instruction: https://github.com/donydchen/matchnerf?tab=readme-ov-file#dtu-for-both-training-and-testing"""
 
 import subprocess
 from pathlib import Path
@@ -35,8 +35,7 @@ def build_camera_info(id_list, root_dir):
     scale_factor = 1.0 / 200
     downSample = 1.0
     for vid in id_list:
-        proj_mat_filename = os.path.join(
-            root_dir, f"Cameras/train/{vid:08d}_cam.txt")
+        proj_mat_filename = os.path.join(root_dir, f"Cameras/train/{vid:08d}_cam.txt")
         intrinsic, extrinsic, near_far = read_cam_file(proj_mat_filename)
 
         intrinsic[:2] *= 4
@@ -71,7 +70,7 @@ def read_cam_file(filename):
 
 
 def get_example_keys(stage: Literal["test", "train"]) -> list[str]:
-    """ Extracted from: https://github.com/donydchen/matchnerf/blob/main/configs/dtu_meta/val_all.txt """
+    """Extracted from: https://github.com/donydchen/matchnerf/blob/main/configs/dtu_meta/val_all.txt"""
     keys = [
         "scan1_train",
         "scan8_train",
@@ -163,9 +162,7 @@ def load_metadata(intrinsics, world2cams) -> Metadata:
 if __name__ == "__main__":
     # we only use DTU for testing, not for training
     for stage in ("test",):
-        intrinsics, world2cams, cam2worlds, near_fars = build_camera_info(
-            list(range(49)), INPUT_IMAGE_DIR
-        )
+        intrinsics, world2cams, cam2worlds, near_fars = build_camera_info(list(range(49)), INPUT_IMAGE_DIR)
 
         keys = get_example_keys(stage)
 
@@ -179,9 +176,7 @@ if __name__ == "__main__":
             global chunk
 
             chunk_key = f"{chunk_index:0>6}"
-            print(
-                f"Saving chunk {chunk_key} of {len(keys)} ({chunk_size / 1e6:.2f} MB)."
-            )
+            print(f"Saving chunk {chunk_key} of {len(keys)} ({chunk_size / 1e6:.2f} MB).")
             dir = OUTPUT_DIR / stage
             dir.mkdir(exist_ok=True, parents=True)
             torch.save(chunk, dir / f"{chunk_key}.torch")
@@ -200,9 +195,7 @@ if __name__ == "__main__":
             example = load_metadata(intrinsics, world2cams)
 
             # Merge the images into the example.
-            example["images"] = [
-                images[timestamp.item()] for timestamp in example["timestamps"]
-            ]
+            example["images"] = [images[timestamp.item()] for timestamp in example["timestamps"]]
             assert len(images) == len(example["timestamps"])
 
             # Add the key to the example.

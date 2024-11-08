@@ -10,6 +10,4 @@ def collate(trees: list[Tree], merge_fn: Callable[[list[Tensor]], Tensor]) -> Tr
     if isinstance(trees[0], Tensor):
         return merge_fn(trees)
     else:
-        return {
-            key: collate([tree[key] for tree in trees], merge_fn) for key in trees[0]
-        }
+        return {key: collate([tree[key] for tree in trees], merge_fn) for key in trees[0]}

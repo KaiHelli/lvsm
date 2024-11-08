@@ -12,9 +12,7 @@ if __name__ == "__main__":
     # Hackily load JSON with comments and trailing commas.
     with (x / ".vscode/launch.json").open("r") as f:
         launch_with_comments = f.readlines()
-    launch = [
-        line for line in launch_with_comments if not line.strip().startswith("//")
-    ]
+    launch = [line for line in launch_with_comments if not line.strip().startswith("//")]
     launch = "".join(launch)
     launch = yaml.safe_load(launch)
 

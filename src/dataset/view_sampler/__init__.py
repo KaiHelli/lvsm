@@ -15,12 +15,7 @@ VIEW_SAMPLERS: dict[str, ViewSampler[Any]] = {
     "evaluation": ViewSamplerEvaluation,
 }
 
-ViewSamplerCfg = (
-    ViewSamplerArbitraryCfg
-    | ViewSamplerBoundedCfg
-    | ViewSamplerEvaluationCfg
-    | ViewSamplerAllCfg
-)
+ViewSamplerCfg = ViewSamplerArbitraryCfg | ViewSamplerBoundedCfg | ViewSamplerEvaluationCfg | ViewSamplerAllCfg
 
 
 def get_view_sampler(

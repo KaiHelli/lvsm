@@ -97,18 +97,12 @@ class MetricComputer(LightningModule):
             self.running_metric_steps = 1
         else:
             s = self.running_metric_steps
-            self.running_metrics = {
-                k: ((s * v) + metrics[k]) / (s + 1)
-                for k, v in self.running_metrics.items()
-            }
+            self.running_metrics = {k: ((s * v) + metrics[k]) / (s + 1) for k, v in self.running_metrics.items()}
             self.running_metric_steps += 1
 
         table = []
         for method in self.cfg.methods:
-            row = [
-                f"{self.running_metrics[f'{metric}_{method.key}']:.3f}"
-                for metric in ("psnr", "lpips", "ssim")
-            ]
+            row = [f"{self.running_metrics[f'{metric}_{method.key}']:.3f}" for metric in ("psnr", "lpips", "ssim")]
             table.append((method.key, *row))
 
         table = tabulate(table, ["Method", "PSNR (dB)", "LPIPS", "SSIM"])

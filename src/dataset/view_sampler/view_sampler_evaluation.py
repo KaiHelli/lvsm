@@ -37,8 +37,7 @@ class ViewSamplerEvaluation(ViewSampler[ViewSamplerEvaluationCfg]):
         dacite_config = Config(cast=[tuple])
         with cfg.index_path.open("r") as f:
             self.index = {
-                k: None if v is None else from_dict(IndexEntry, v, dacite_config)
-                for k, v in json.load(f).items()
+                k: None if v is None else from_dict(IndexEntry, v, dacite_config) for k, v in json.load(f).items()
             }
 
     def sample(

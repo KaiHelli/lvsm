@@ -14,7 +14,7 @@ colorspacious
 matplotlib
 moviepy
 imageio
-git+https://github.com/dcharatan/diff-gaussian-rasterization-modified
+#git+https://github.com/dcharatan/diff-gaussian-rasterization-modified
 timm
 dacite
 lpips
@@ -24,3 +24,6 @@ tabulate
 svg.py
 opencv-python==4.6.0.66
 sk-video
+
+# Maybe
+# lightning-fabric

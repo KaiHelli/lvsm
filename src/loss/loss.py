@@ -5,9 +5,7 @@ from typing import Generic, TypeVar
 from jaxtyping import Float
 from torch import Tensor, nn
 
-from ..dataset.types import BatchedExample
-from ..model.decoder.decoder import DecoderOutput
-from ..model.types import Gaussians
+from ..dataset.types import BatchedExample, BatchedViewsRGBD
 
 T_cfg = TypeVar("T_cfg")
 T_wrapper = TypeVar("T_wrapper")
@@ -28,9 +26,8 @@ class Loss(nn.Module, ABC, Generic[T_cfg, T_wrapper]):
     @abstractmethod
     def forward(
         self,
-        prediction: DecoderOutput,
+        prediction: BatchedViewsRGBD,
         batch: BatchedExample,
-        gaussians: Gaussians,
         global_step: int,
     ) -> Float[Tensor, ""]:
         pass

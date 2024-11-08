@@ -87,15 +87,11 @@ def overlay(
 
     # Compute spacing on the main dimension.
     main_dim = _get_main_dim(main_axis)
-    main_slice = _compute_offset(
-        base.shape[main_dim], overlay.shape[main_dim], main_axis_alignment
-    )
+    main_slice = _compute_offset(base.shape[main_dim], overlay.shape[main_dim], main_axis_alignment)
 
     # Compute spacing on the cross dimension.
     cross_dim = _get_cross_dim(main_axis)
-    cross_slice = _compute_offset(
-        base.shape[cross_dim], overlay.shape[cross_dim], cross_axis_alignment
-    )
+    cross_slice = _compute_offset(base.shape[cross_dim], overlay.shape[cross_dim], cross_axis_alignment)
 
     # Combine the slices and paste the overlay onto the base accordingly.
     selector = [..., None, None]
@@ -197,9 +193,7 @@ def add_border(
 ) -> Float[Tensor, "channel new_height new_width"]:
     color = _sanitize_color(color).to(image)
     c, h, w = image.shape
-    result = torch.empty(
-        (c, h + 2 * border, w + 2 * border), dtype=torch.float32, device=image.device
-    )
+    result = torch.empty((c, h + 2 * border, w + 2 * border), dtype=torch.float32, device=image.device)
     result[:] = color[:, None, None]
     result[:, border : h + border, border : w + border] = image
     return result

@@ -41,9 +41,7 @@ class ViewSamplerArbitrary(ViewSampler[ViewSamplerArbitraryCfg]):
         # Allow the context views to be fixed.
         if self.cfg.context_views is not None:
             assert len(self.cfg.context_views) == self.cfg.num_context_views
-            index_context = torch.tensor(
-                self.cfg.context_views, dtype=torch.int64, device=device
-            )
+            index_context = torch.tensor(self.cfg.context_views, dtype=torch.int64, device=device)
 
         index_target = torch.randint(
             0,
@@ -55,9 +53,7 @@ class ViewSamplerArbitrary(ViewSampler[ViewSamplerArbitraryCfg]):
         # Allow the target views to be fixed.
         if self.cfg.target_views is not None:
             assert len(self.cfg.target_views) == self.cfg.num_target_views
-            index_target = torch.tensor(
-                self.cfg.target_views, dtype=torch.int64, device=device
-            )
+            index_target = torch.tensor(self.cfg.target_views, dtype=torch.int64, device=device)
 
         return index_context, index_target
 

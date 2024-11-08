@@ -84,10 +84,7 @@ def run_msaa_pass(
 ) -> Float[Tensor, "batch 4 height width"]:  # color (RGBA with straight alpha)
     # Sample the color function.
     b, h, w, _ = xy.shape
-    color = [
-        color_function(batch)
-        for batch in rearrange(xy, "b h w xy -> (b h w) xy").split(batch_size)
-    ]
+    color = [color_function(batch) for batch in rearrange(xy, "b h w xy -> (b h w) xy").split(batch_size)]
     color = torch.cat(color, dim=0)
     color = rearrange(color, "(b h w) c -> b c h w", b=b, h=h, w=w)
 
