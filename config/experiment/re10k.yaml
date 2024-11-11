@@ -8,9 +8,9 @@ wandb:
   name: re10k
   tags: [re10k, 256x256]
 
-data_loader:
-  train:
-    batch_size: 14
+#data_loader:
+#  train:
+#    batch_size: 14
 
 trainer:
   max_steps: 300_001

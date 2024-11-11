@@ -15,8 +15,8 @@ from packaging.version import parse as parse_version
 
 try:
     from flash_attn.flash_attn_interface import (
-        flash_attn_varlen_qkvpacked_func,
-        flash_attn_varlen_kvpacked_func,
+        flash_attn_qkvpacked_func,
+        flash_attn_kvpacked_func,
     )
 
     HAVE_FLASH_ATTN = True
@@ -141,7 +141,7 @@ class MultiHeadAttention(torch.nn.Module):
             assert attn_mask is None, "Attention mask is not supported with FlashAttention for self-attention."
 
             # Use FlashAttention for self-attention if available and suitable
-            output = flash_attn_varlen_qkvpacked_func(
+            output = flash_attn_qkvpacked_func(
                 qkv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal
             )
             output = rearrange(output, "b s h d -> b s (h d)")
@@ -151,16 +151,22 @@ class MultiHeadAttention(torch.nn.Module):
             assert attn_mask is None, "Attention mask is not supported with FlashAttention for cross-attention."
 
             # Use FlashAttention for cross-attention if available and suitable
-            output = flash_attn_varlen_kvpacked_func(
+            output = flash_attn_kvpacked_func(
                 q, kv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal
             )
             return rearrange(output, "b s h d -> b s (h d)")
         elif parse_version(torch.__version__) >= parse_version("2.0.0"):
             # Use torch's scaled_dot_product_attention with SDP kernel in torch >= 2.0
-            with torch.backends.cuda.sdp_kernel(
-                enable_flash=True,
-                enable_math=(not torch.cuda.is_available()),
-                enable_mem_efficient=False,
+            backends = []
+            if not torch.cuda.is_available():
+                backends.append(torch.nn.attention.SDPBackend.MATH)
+            else:
+                # backends.append(torch.nn.attention.SDPBackend.FLASH_ATTENTION)
+                # backends.append(torch.nn.attention.SDPBackend.CUDNN_ATTENTION)
+                backends.append(torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION)
+
+            with torch.nn.attention.sdpa_kernel(
+                backends=backends,
             ):
                 # Ensure the correct q, k, v setup for cross-attention or self-attention
                 if self.cross_attn and q is not None and kv is not None:

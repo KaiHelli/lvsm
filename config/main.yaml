@@ -1,14 +1,14 @@
 defaults:
   - dataset: re10k
   - optional dataset/view_sampler_dataset_specific_config: ${dataset/view_sampler}_${dataset}
-  - lvsm_model: model
-  - loss: [mse]
+  - model/lvsm@model.lvsm
+  - loss: [mse, lpips]
 
 wandb:
-  project: mvsplat
-  entity: placeholder
-  name: placeholder
-  mode: disabled
+  project: lvsm
+  entity: tum-edu
+  name: test
+  mode: online
   id: null
 
 mode: train
@@ -21,7 +21,7 @@ data_loader:
   train:
     num_workers: 10
     persistent_workers: true
-    batch_size: 4
+    batch_size: 2 # was 4
     seed: 1234
   test:
     num_workers: 4
@@ -33,11 +33,17 @@ data_loader:
     persistent_workers: true
     batch_size: 1
     seed: 3456
+#  shims:
+#    calculate_rays: true
 
 optimizer:
-  lr: 2.e-4
-  warm_up_steps: 2000
-  cosine_lr: true
+  lr: 4e-4
+  initial_lr: 1e-6
+  min_lr: 1e-6
+  warm_up_steps: 2500
+  beta_1: 0.9
+  beta_2: 0.95
+  weight_decay: 0.05
 
 checkpointing:
   load: null

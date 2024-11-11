@@ -1,0 +1,5 @@
+defaults:
+  - transformer@transformer_cfg: lvsm_small
+
+patch_size: 8
+num_channels: 3

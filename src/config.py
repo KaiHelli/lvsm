@@ -7,7 +7,9 @@ from omegaconf import DictConfig, OmegaConf
 
 from .dataset.data_module import DataLoaderCfg, DatasetCfg
 from .loss import LossCfgWrapper
-from .lvsm_model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg
+from .model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg
+from .model.transformer import TransformerCfg
+from .model.lvsm import LVSMCfg
 
 
 @dataclass
@@ -21,15 +23,8 @@ class CheckpointingCfg:
 
 @dataclass
 class ModelCfg:
-    d_model: int
-    d_k: int
-    d_v: int
-    num_heads: int
-    d_ff: int
-    dropout_p: float
-    num_encoder_layers: int
-    num_decoder_layers: int
-    bias: bool
+    transformer: TransformerCfg | None
+    lvsm: LVSMCfg | None
 
 
 @dataclass
@@ -47,7 +42,7 @@ class RootCfg:
     mode: Literal["train", "test"]
     dataset: DatasetCfg
     data_loader: DataLoaderCfg
-    lvsm_model: ModelCfg
+    model: ModelCfg
     optimizer: OptimizerCfg
     checkpointing: CheckpointingCfg
     trainer: TrainerCfg

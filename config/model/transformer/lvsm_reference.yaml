@@ -1,0 +1,11 @@
+d_model: 768
+d_k: 64
+d_v: 64
+num_heads: 16
+d_ff: 4096
+dropout_p: 0.0
+num_encoder_layers: 24
+num_decoder_layers: 0
+bias: false
+activation: gelu
+pre_norm: true

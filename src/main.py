@@ -27,8 +27,8 @@ with install_import_hook(
     from src.misc.LocalLogger import LocalLogger
     from src.misc.step_tracker import StepTracker
     from src.misc.wandb_tools import update_checkpoint_path
-    from src.lvsm_model.model_wrapper import ModelWrapper
-    from lvsm_model.transformer import Transformer
+    from src.model.model_wrapper import ModelWrapper
+    from src.model.lvsm import LVSM
 
 
 def cyan(text: str) -> str:
@@ -115,7 +115,7 @@ def train(cfg_dict: DictConfig):
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
 
-    model = Transformer(**cfg_dict.lvsm_model)
+    model = LVSM.from_cfg(cfg=cfg.model.lvsm)
 
     model_kwargs = {
         "optimizer_cfg": cfg.optimizer,

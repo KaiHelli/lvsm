@@ -1,28 +1,29 @@
 import random
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, List, Any
 
 import numpy as np
 import torch
 from pytorch_lightning import LightningDataModule
 from torch import Generator, nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch.utils.data import DataLoader, Dataset, IterableDataset, default_collate
 
 from ..misc.step_tracker import StepTracker
 from . import DatasetCfg, get_dataset
 from .types import DataShim, Stage
 from .validation_wrapper import ValidationWrapper
+from .shims.plucker_rays import generate_rays_batch
 
 
-def get_data_shim(encoder: nn.Module) -> DataShim:
+def get_data_shim(model: nn.Module) -> DataShim:
     """Get functions that modify the batch. It's sometimes necessary to modify batches
     outside the data loader because GPU computations are required to modify the batch or
     because the modification depends on something outside the data loader.
     """
 
     shims: list[DataShim] = []
-    if hasattr(encoder, "get_data_shim"):
-        shims.append(encoder.get_data_shim())
+    if hasattr(model, "get_data_shim"):
+        shims.append(model.get_data_shim())
 
     def combined_shim(batch):
         for shim in shims:
@@ -40,14 +41,35 @@ class DataLoaderStageCfg:
     seed: int | None
 
 
+#@dataclass
+#class DataLoaderShimCfg:
+#    calculate_rays: bool
+
+
 @dataclass
 class DataLoaderCfg:
     train: DataLoaderStageCfg
     test: DataLoaderStageCfg
     val: DataLoaderStageCfg
+#    shims: DataLoaderShimCfg
 
 
 DatasetShim = Callable[[Dataset, Stage], Dataset]
+
+
+#class RayCollateFn:
+#    """Callable class for the ray collate function, to ensure it is pickleable."""
+
+#    def __init__(self) -> None:
+#        pass
+
+#    def __call__(self, batch: List[dict[str, Any]]) -> dict[str, Any]:
+#        # Stack the batch into tensors
+#        collated_batch = default_collate(batch)
+#        # Generate rays for the 'context' and 'target' views
+#        collated_batch = generate_rays_batch(collated_batch)
+
+#        return collated_batch
 
 
 def worker_init_fn(worker_id: int) -> None:
@@ -76,6 +98,10 @@ class DataModule(LightningDataModule):
         self.step_tracker = step_tracker
         self.dataset_shim = dataset_shim
         self.global_rank = global_rank
+        self.collate_fn = None
+
+#        if self.data_loader_cfg.shims.calculate_rays:
+#            self.collate_fn = RayCollateFn()
 
     def get_persistent(self, loader_cfg: DataLoaderStageCfg) -> bool | None:
         return None if loader_cfg.num_workers == 0 else loader_cfg.persistent_workers
@@ -95,6 +121,7 @@ class DataModule(LightningDataModule):
             self.data_loader_cfg.train.batch_size,
             shuffle=not isinstance(dataset, IterableDataset),
             num_workers=self.data_loader_cfg.train.num_workers,
+            collate_fn=self.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.train),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.train),
@@ -107,6 +134,7 @@ class DataModule(LightningDataModule):
             ValidationWrapper(dataset, 1),
             self.data_loader_cfg.val.batch_size,
             num_workers=self.data_loader_cfg.val.num_workers,
+            collate_fn=self.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.val),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.val),
@@ -123,6 +151,7 @@ class DataModule(LightningDataModule):
             dataset,
             self.data_loader_cfg.test.batch_size,
             num_workers=self.data_loader_cfg.test.num_workers,
+            collate_fn=self.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.test),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.test),

@@ -13,7 +13,8 @@ git clone https://github.com/kaihelli/lvsm.git
 cd lvsm
 conda create -n lvsm python=3.10
 conda activate lvsm
-pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
+# In case a different CUDA version than the default (12.4) is required, execute the following line with the correct version specified.
+pip install 'torch>=2.1,<2.5' 'torchvision<0.20' --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
 ```
 

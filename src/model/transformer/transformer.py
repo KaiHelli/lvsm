@@ -2,9 +2,41 @@ import torch
 from .encoder import TransformerEncoder
 from .decoder import TransformerDecoder
 from src.dataset.types import DataShim
+from dataclasses import dataclass
+
+
+@dataclass
+class TransformerCfg:
+    d_model: int
+    d_k: int
+    d_v: int
+    num_heads: int
+    d_ff: int
+    dropout_p: float
+    num_encoder_layers: int
+    num_decoder_layers: int
+    bias: bool
+    activation: str
+    pre_norm: bool
 
 
 class Transformer(torch.nn.Module):
+    @classmethod
+    def from_config(cls, cfg: TransformerCfg) -> "Transformer":
+        return cls(
+            d_model=cfg.d_model,
+            d_k=cfg.d_k,
+            d_v=cfg.d_v,
+            num_heads=cfg.num_heads,
+            d_ff=cfg.d_ff,
+            dropout_p=cfg.dropout_p,
+            num_encoder_layers=cfg.num_encoder_layers,
+            num_decoder_layers=cfg.num_decoder_layers,
+            activation=cfg.activation,
+            bias=cfg.bias,
+            pre_norm=cfg.pre_norm,
+        )
+
     def __init__(
         self,
         d_model,
@@ -13,9 +45,12 @@ class Transformer(torch.nn.Module):
         num_heads,
         d_ff,
         dropout_p,
+        *,
         num_encoder_layers=0,
         num_decoder_layers=0,
+        activation="relu",
         bias=True,
+        pre_norm=False,
     ):
         """
         Transformer model that can be used as encoder-decoder, encoder-only, or decoder-only.
@@ -44,6 +79,8 @@ class Transformer(torch.nn.Module):
                 d_ff=d_ff,
                 dropout_p=dropout_p,
                 bias=bias,
+                activation=activation,
+                pre_norm=pre_norm,
             )
         else:
             self.encoder = None
@@ -59,11 +96,13 @@ class Transformer(torch.nn.Module):
                 d_ff=d_ff,
                 dropout_p=dropout_p,
                 bias=bias,
+                activation=activation,
+                pre_norm=pre_norm,
             )
         else:
             self.decoder = None
 
-    def forward(self, src=None, tgt=None, src_mask=None, tgt_mask=None):
+    def forward(self, src=None, tgt=None, *, src_mask=None, tgt_causal=True, tgt_sa_mask=None, tgt_ca_mask=None):
         """
         Forward pass for the transformer model.
 
@@ -81,14 +120,14 @@ class Transformer(torch.nn.Module):
         if self.decoder is not None and tgt is not None:
             if enc_output is None:
                 raise ValueError("Decoder-only transformer requires non-null target input (tgt).")
-            dec_output = self.decoder(tgt, enc_output, self_attn_mask=tgt_mask, cross_attn_mask=src_mask)
+            dec_output = self.decoder(tgt, enc_output, causal=tgt_causal, self_attn_mask=tgt_sa_mask, cross_attn_mask=tgt_ca_mask)
             return dec_output
 
         if self.encoder is not None and self.decoder is None:
             return enc_output
 
         if self.decoder is not None and self.encoder is None:
-            dec_output = self.decoder(tgt, None, self_attn_mask=tgt_mask)
+            dec_output = self.decoder(tgt, None, causal=tgt_causal, self_attn_mask=tgt_sa_mask)
             return dec_output
 
         raise ValueError("At least one of encoder or decoder must be specified.")

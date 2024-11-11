@@ -5,11 +5,10 @@ import sys
 import os
 from unittest.mock import patch
 
-from lvsm_model.transformer import Transformer
+from model.transformer import Transformer
 
 
-@pytest.fixture
-def setup_models():
+def setup_models(pre_norm):
     d_model = 512
     nhead = 8
     num_encoder_layers = 6
@@ -27,6 +26,7 @@ def setup_models():
         dropout=dropout,
         activation="relu",
         batch_first=True,
+        norm_first=pre_norm,
         bias=True,
     )
 
@@ -41,6 +41,8 @@ def setup_models():
         num_encoder_layers=num_encoder_layers,
         num_decoder_layers=num_decoder_layers,
         bias=True,
+        pre_norm=pre_norm,
+        activation="relu",
     )
 
     return reference_model, our_model
@@ -53,6 +55,9 @@ def copy_weights(reference_model, our_model):
     with torch.no_grad():
         d_model = our_model.encoder.layers[0].self_attn.d_model
         d_ff = our_model.encoder.layers[0].mlp[0].out_features
+
+        our_model.encoder.norm.weight.data = reference_model.encoder.norm.weight.data.clone()
+        our_model.encoder.norm.bias.data = reference_model.encoder.norm.bias.data.clone()
 
         # Copy encoder weights layer by layer
         for ref_layer, our_layer in zip(reference_model.encoder.layers, our_model.encoder.layers):
@@ -75,6 +80,9 @@ def copy_weights(reference_model, our_model):
 
             our_layer.mlp[3].weight.data = ref_layer.linear2.weight.data.clone()
             our_layer.mlp[3].bias.data = ref_layer.linear2.bias.data.clone()
+
+        our_model.decoder.norm.weight.data = reference_model.decoder.norm.weight.data.clone()
+        our_model.decoder.norm.bias.data = reference_model.decoder.norm.bias.data.clone()
 
         # Copy decoder weights layer by layer
         for ref_layer, our_layer in zip(reference_model.decoder.layers, our_model.decoder.layers):
@@ -136,13 +144,14 @@ def device(request):
     return request.param
 
 
-def test_transformer_equivalence(setup_models, device, torch_version):
+@pytest.mark.parametrize("pre_norm", [True, False])
+def test_transformer_equivalence(device, torch_version, pre_norm):
     with patch(
         "torch.__version__",
         new=torch_version if torch_version is not None else torch.__version__,
     ):
 
-        reference_model, our_model = setup_models
+        reference_model, our_model = setup_models(pre_norm)
         reference_model.to(device)
         our_model.to(device)
         copy_weights(reference_model, our_model)

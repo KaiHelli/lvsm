@@ -112,6 +112,132 @@ def get_world_rays(
     return origins, directions
 
 
+def calculate_plucker_rays(
+    image: Float[Tensor, "*#batch c h w"], extrinsics: Float[Tensor, "*#batch 4 4"], intrinsics: Float[Tensor, "*#batch 3 3"]
+) -> Float[Tensor, "*batch 6 h w"]:
+    b, v, _, *grid_shape = image.shape
+
+    # Generate image grid coordinates
+    coordinates, _ = sample_image_grid(tuple(grid_shape), device=image.device)
+
+    # Get world rays using the get_world_rays function
+    origins, directions = get_world_rays(rearrange(coordinates, "... d -> ... () () d"), extrinsics, intrinsics)
+
+    # Reshape origins and directions back to the original batch and view dimensions
+    origins = rearrange(origins, "h w ... c -> ... h w c")
+    directions = rearrange(directions, "h w ... c -> ... h w c")
+
+    # Calculate Plücker coordinates
+    L = directions
+    M = torch.cross(origins, directions, dim=-1)
+
+    # Concatenate L and M along the last dimension and permute to match the desired output shape
+    plucker_rays = torch.cat((L, M), dim=-1)  # Shape: (b, n, h, w, 6)
+    plucker_rays = rearrange(plucker_rays, "... h w c -> ... c h w")  # Shape: (b, n, 6, h, w)
+
+    return plucker_rays
+
+
+def plucker_to_point_direction(plucker_rays: Float[Tensor, "*batch 6 h w"], normalize_moment=True) -> Float[Tensor, "*batch 6 h w"]:
+    """
+    Convert Plücker rays <D, OxD> to point-direction representation <O, D>. 
+
+    Args:
+        plucker_rays: A tensor representing Plücker rays, shape: (b, n, 6, h, w)
+
+    Returns:
+        A tensor representing point-direction rays, shape: (b, n, 6, h, w)
+
+    Source:
+        @InProceedings{zhang2024raydiffusion,
+            title={Cameras as Rays: Pose Estimation via Ray Diffusion},
+            author={Zhang, Jason Y and Lin, Amy and Kumar, Moneish and Yang, Tzu-Hsuan and Ramanan, Deva and Tulsiani, Shubham},
+            booktitle={International Conference on Learning Representations (ICLR)},
+            year={2024}
+        }
+        https://github.com/jasonyzhang/RayDiffusion/blob/main/ray_diffusion/utils/rays.py#L129
+    """
+    # Extract direction (L) and origin (M) from Plücker rays
+    L = plucker_rays[..., :3]
+    M = plucker_rays[..., 3:]
+
+    direction = torch.nn.functional.normalize(L, dim=-1)
+
+    if normalize_moment:
+        c = torch.norm(L, dim=-1, keepdim=True)
+        M = M / c
+    
+    points = torch.cross(L, M, dim=-1)
+
+    return torch.cat((points, direction), dim=-1)
+
+
+# TODO: Currently implemented incorrectly
+def plot_plucker_rays(image, plucker_rays, step=16):
+    """
+    Plots Plücker rays on top of the given image.
+
+    Args:
+        image: A tensor representing the image, shape: (b, n, c, h, w)
+        plucker_rays: A tensor representing Plücker rays, shape: (b, n, 6, h, w)
+        step: Step size to reduce the density of rays for better visualization.
+    """
+    pass
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from einops import rearrange
+    import uuid
+
+    # Convert torch tensor image to numpy for visualization
+    image_np = image.cpu().numpy()[0, 0]  # Assuming batch size is 1 for visualization
+    image_np = np.transpose(image_np, (1, 2, 0))  # (h, w, c)
+
+    # Create a figure and axis object
+    fig, ax = plt.subplots()
+    ax.imshow(image_np)
+    ax.axis('off')
+
+    # Extract origin (M) and direction (L) from Plücker rays
+    L = plucker_rays[0, 0, :3]  # (3, h, w)
+    M = plucker_rays[0, 0, 3:]  # (3, h, w)
+
+    # Get image dimensions
+    img_height, img_width, _ = image_np.shape
+
+    # Use step to reduce the number of rays for better visualization
+    h, w = L.shape[1], L.shape[2]
+    for i in range(0, h, step):
+        for j in range(0, w, step):
+            # The origin is the pixel position (i + 0.5, j + 0.5) scaled to the image dimensions to get the center of the pixel
+            origin_x = (j + 0.5) / w * img_width
+            origin_y = (i + 0.5) / h * img_height
+
+            # Extract direction at the given (i, j) position
+            direction = L[:, i, j]
+
+            # Convert direction to pixel scale for visualization
+            direction_x = direction[0].cpu().numpy() * img_width
+            direction_y = direction[1].cpu().numpy() * img_height
+
+            # Define start and end points for the ray (scale down direction for better visualization)
+            start = (origin_x, origin_y)
+            end = (origin_x + direction_x * 0.05, origin_y + direction_y * 0.05)  # Scale down the direction
+
+            # Plotting a line for each ray
+            ax.plot([start[0], end[0]], [start[1], end[1]], color='r', alpha=0.6)
+
+    # Generate a random ID for the filename
+    random_id = str(uuid.uuid4())
+    filename = f"plucker_rays_{random_id}.png"
+    
+    # Save the plot with the generated filename
+    fig.savefig(filename, bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+    
+    print(f"Plot saved as {filename}")
+    """
+
 def sample_image_grid(
     shape: tuple[int, ...],
     device: torch.device = torch.device("cpu"),

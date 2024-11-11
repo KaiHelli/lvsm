@@ -15,7 +15,7 @@ import numpy as np
 import json
 
 from ..dataset.data_module import get_data_shim
-from ..dataset.types import BatchedExample
+from ..dataset.types import BatchedExample, BatchedViewsRGBD
 from ..dataset import DatasetCfg
 from ..evaluation.metrics import compute_lpips, compute_psnr, compute_ssim
 from ..global_cfg import get_cfg
@@ -37,13 +37,18 @@ from ..visualization.color_map import apply_color_map_to_image
 from ..visualization.layout import add_border, hcat, vcat
 from ..visualization import layout
 
+from .transformer.norm import LayerNorm
+from .lr_scheduler import WarmupCosineLR
 
 @dataclass
 class OptimizerCfg:
     lr: float
     warm_up_steps: int
-    cosine_lr: bool
-
+    beta_1: float
+    beta_2: float
+    weight_decay: float
+    initial_lr: float
+    min_lr: float
 
 @dataclass
 class TestCfg:
@@ -106,39 +111,33 @@ class ModelWrapper(LightningModule):
         self.benchmarker = Benchmarker()
         self.eval_cnt = 0
 
-        # if self.test_cfg.compute_scores:
-        #    self.test_step_outputs = {}
-        #    self.time_skip_steps_dict = {"encoder": 0, "decoder": 0}
+        if self.test_cfg.compute_scores:
+            self.test_step_outputs = {}
+            self.time_skip_steps_dict = {"model": 0}
 
     def training_step(self, batch, batch_idx):
         batch: BatchedExample = self.data_shim(batch)
         _, _, _, h, w = batch["target"]["image"].shape
 
         # Run the model.
+        output = self.model(batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"])
 
-        gaussians = self.encoder(batch["context"], self.global_step, False, scene_names=batch["scene"])
-        output = self.decoder.forward(
-            gaussians,
-            batch["target"]["extrinsics"],
-            batch["target"]["intrinsics"],
-            batch["target"]["near"],
-            batch["target"]["far"],
-            (h, w),
-            depth_mode=self.train_cfg.depth_mode,
-        )
+        # Type the output.
+        output = BatchedViewsRGBD({"color": output, "depth": None})
+
         target_gt = batch["target"]["image"]
 
         # Compute metrics.
         psnr_probabilistic = compute_psnr(
             rearrange(target_gt, "b v c h w -> (b v) c h w"),
-            rearrange(output.color, "b v c h w -> (b v) c h w"),
+            rearrange(output["color"], "b v c h w -> (b v) c h w"),
         )
         self.log("train/psnr_probabilistic", psnr_probabilistic.mean())
 
         # Compute and log loss.
         total_loss = 0
         for loss_fn in self.losses:
-            loss = loss_fn.forward(output, batch, gaussians, self.global_step)
+            loss = loss_fn.forward(output, batch, self.global_step)
             self.log(f"loss/{loss_fn.name}", loss)
             total_loss = total_loss + loss
         self.log("loss/total", total_loss)
@@ -167,28 +166,17 @@ class ModelWrapper(LightningModule):
         b, v, _, h, w = batch["target"]["image"].shape
         assert b == 1
 
-        # Render Gaussians.
-        with self.benchmarker.time("encoder"):
-            gaussians = self.encoder(
-                batch["context"],
-                self.global_step,
-                deterministic=False,
-            )
-        with self.benchmarker.time("decoder", num_calls=v):
-            output = self.decoder.forward(
-                gaussians,
-                batch["target"]["extrinsics"],
-                batch["target"]["intrinsics"],
-                batch["target"]["near"],
-                batch["target"]["far"],
-                (h, w),
-                depth_mode=None,
-            )
+        # Run the model.
+        with self.benchmarker.time("model"):
+            output = self.model(batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"])
+
+        # Type the output.
+        output = BatchedViewsRGBD({"color": output, "depth": None})
 
         (scene,) = batch["scene"]
         name = get_cfg()["wandb"]["name"]
         path = self.test_cfg.output_path / name
-        images_prob = output.color[0]
+        images_prob = output["color"][0]
         rgb_gt = batch["target"]["image"][0]
 
         # Save images.
@@ -207,8 +195,8 @@ class ModelWrapper(LightningModule):
         # compute scores
         if self.test_cfg.compute_scores:
             if batch_idx < self.test_cfg.eval_time_skip_steps:
-                self.time_skip_steps_dict["encoder"] += 1
-                self.time_skip_steps_dict["decoder"] += v
+                self.time_skip_steps_dict["model"] += 1 #TODO: += v?
+
             rgb = images_prob
 
             if f"psnr" not in self.test_step_outputs:
@@ -221,6 +209,7 @@ class ModelWrapper(LightningModule):
             self.test_step_outputs[f"psnr"].append(compute_psnr(rgb_gt, rgb).mean().item())
             self.test_step_outputs[f"ssim"].append(compute_ssim(rgb_gt, rgb).mean().item())
             self.test_step_outputs[f"lpips"].append(compute_lpips(rgb_gt, rgb).mean().item())
+
 
     def on_test_end(self) -> None:
         name = get_cfg()["wandb"]["name"]
@@ -254,8 +243,6 @@ class ModelWrapper(LightningModule):
 
     @rank_zero_only
     def validation_step(self, batch, batch_idx):
-        return
-    
         batch: BatchedExample = self.data_shim(batch)
 
         if self.global_rank == 0:
@@ -265,27 +252,20 @@ class ModelWrapper(LightningModule):
                 f"context = {batch['context']['index'].tolist()}"
             )
 
-        # Render Gaussians.
         b, _, _, h, w = batch["target"]["image"].shape
         assert b == 1
-        gaussians_softmax = self.encoder(
-            batch["context"],
-            self.global_step,
-            deterministic=False,
-        )
-        output_softmax = self.decoder.forward(
-            gaussians_softmax,
-            batch["target"]["extrinsics"],
-            batch["target"]["intrinsics"],
-            batch["target"]["near"],
-            batch["target"]["far"],
-            (h, w),
-        )
-        rgb_softmax = output_softmax.color[0]
+
+        # Run the model.
+        output = self.model(batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"])
+
+        # Type the output.
+        output = BatchedViewsRGBD({"color": output, "depth": None})
+
+        rgb_out = output["color"][0]
 
         # Compute validation metrics.
         rgb_gt = batch["target"]["image"][0]
-        for tag, rgb in zip(("val",), (rgb_softmax,)):
+        for tag, rgb in zip(("val",), (rgb_out,)):
             psnr = compute_psnr(rgb_gt, rgb).mean()
             self.log(f"val/psnr_{tag}", psnr)
             lpips = compute_lpips(rgb_gt, rgb).mean()
@@ -297,7 +277,7 @@ class ModelWrapper(LightningModule):
         comparison = hcat(
             add_label(vcat(*batch["context"]["image"][0]), "Context"),
             add_label(vcat(*rgb_gt), "Target (Ground Truth)"),
-            add_label(vcat(*rgb_softmax), "Target (Softmax)"),
+            add_label(vcat(*rgb_out), "Target (Predicted)"),
         )
         self.logger.log_image(
             "comparison",
@@ -306,33 +286,12 @@ class ModelWrapper(LightningModule):
             caption=batch["scene"],
         )
 
-        # Render projections and construct projection image.
-        # projections = hcat(*render_projections(
-        #                        gaussians_softmax,
-        #                        256,
-        #                        extra_label="(Softmax)",
-        #                    )[0])
-        # self.logger.log_image(
-        #    "projection",
-        #    [prep_image(add_border(projections))],
-        #    step=self.global_step,
-        # )
-
-        # Draw cameras.
-        # cameras = hcat(*render_cameras(batch, 256))
-        # self.logger.log_image(
-        #    "cameras", [prep_image(add_border(cameras))], step=self.global_step
-        # )
-
-        if self.encoder_visualizer is not None:
-            for k, image in self.encoder_visualizer.visualize(batch["context"], self.global_step).items():
-                self.logger.log_image(k, [prep_image(image)], step=self.global_step)
-
+        # TODO: Look at this.
         # Run video validation step.
-        self.render_video_interpolation(batch)
-        self.render_video_wobble(batch)
-        if self.train_cfg.extended_visualization:
-            self.render_video_interpolation_exaggerated(batch)
+        # self.render_video_interpolation(batch)
+        # self.render_video_wobble(batch)
+        #if self.train_cfg.extended_visualization:
+        #    self.render_video_interpolation_exaggerated(batch)
 
     @rank_zero_only
     def render_video_wobble(self, batch: BatchedExample) -> None:
@@ -450,13 +409,13 @@ class ModelWrapper(LightningModule):
         near = repeat(batch["context"]["near"][:, 0], "b -> b v", v=num_frames)
         far = repeat(batch["context"]["far"][:, 0], "b -> b v", v=num_frames)
         output_prob = self.decoder.forward(gaussians_prob, extrinsics, intrinsics, near, far, (h, w), "depth")
-        images_prob = [vcat(rgb, depth) for rgb, depth in zip(output_prob.color[0], depth_map(output_prob.depth[0]))]
+        images_prob = [vcat(rgb, depth) for rgb, depth in zip(output_prob["color"][0], depth_map(output_prob.depth[0]))]
         # output_det = self.decoder.forward(
         #     gaussians_det, extrinsics, intrinsics, near, far, (h, w), "depth"
         # )
         # images_det = [
         #     vcat(rgb, depth)
-        #     for rgb, depth in zip(output_det.color[0], depth_map(output_det.depth[0]))
+        #     for rgb, depth in zip(output_det["color"][0], depth_map(output_det.depth[0]))
         # ]
         images = [
             add_border(
@@ -487,28 +446,60 @@ class ModelWrapper(LightningModule):
                 clip.write_videofile(str(dir / f"{self.global_step:0>6}.mp4"), logger=None)
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.optimizer_cfg.lr)
-        if self.optimizer_cfg.cosine_lr:
-            warm_up = torch.optim.lr_scheduler.OneCycleLR(
-                optimizer,
-                self.optimizer_cfg.lr,
-                self.trainer.max_steps + 10,
-                pct_start=0.01,
-                cycle_momentum=False,
-                anneal_strategy="cos",
-            )
-        else:
-            warm_up_steps = self.optimizer_cfg.warm_up_steps
-            warm_up = torch.optim.lr_scheduler.LinearLR(
-                optimizer,
-                1 / warm_up_steps,
-                1,
-                total_iters=warm_up_steps,
-            )
+        """
+        Weight-decay exclusion adapted from minGPT:
+        https://github.com/karpathy/minGPT/blob/37baab71b9abea1b76ab957409a1cc2fbfba8a26/mingpt/model.py#L215
+
+        Some discussion on the topic:
+        https://github.com/karpathy/minGPT/pull/24#issuecomment-679316025
+        https://discuss.pytorch.org/t/weight-decay-in-the-optimizers-is-a-bad-idea-especially-with-batchnorm/16994
+        """
+        decay = set()
+        no_decay = set()
+
+        whitelist_weight_modules = (nn.Linear, )
+        blacklist_weight_modules = (nn.LayerNorm, LayerNorm, nn.Embedding)
+
+        for module_name, module in self.named_modules():
+            for param_name, param in module.named_parameters():
+                full_param_name = f"{module_name}.{param_name}" if module_name else param_name
+
+                if param_name.endswith("bias"):
+                    # Exclude biases from weight decay.
+                    no_decay.add(full_param_name)
+                elif param_name == "weight" and isinstance(module, whitelist_weight_modules):
+                    # Include weights of certain modules in weight decay.
+                    decay.add(full_param_name)
+                elif param_name == "weight" and isinstance(module, blacklist_weight_modules):
+                    # Exclude weights of certain modules from weight decay.
+                    no_decay.add(full_param_name)
+
+        # validate that we considered every parameter
+        param_dict = {param_name: param for param_name, param in self.named_parameters()}
+        inter_params = decay & no_decay
+        union_params = decay | no_decay
+        assert len(inter_params) == 0, f"parameters {inter_params} made it into both decay/no_decay sets!"
+        assert len(param_dict.keys() - union_params) == 0, f"parameters {param_dict.keys() - union_params} were not separated into either decay/no_decay set!"
+
+        # create optimizer groups
+        optim_groups = [
+            {"params": [param_dict[param_name] for param_name in sorted(list(decay))], "weight_decay": self.optimizer_cfg.weight_decay},
+            {"params": [param_dict[param_name] for param_name in sorted(list(no_decay))], "weight_decay": 0.0},
+        ]
+
+        optimizer = optim.AdamW(optim_groups, lr=self.optimizer_cfg.lr, betas=(self.optimizer_cfg.beta_1, self.optimizer_cfg.beta_2))
+
+        lr_scheduler = WarmupCosineLR(
+            optimizer,
+            warmup_steps=self.optimizer_cfg.warm_up_steps,
+            max_steps=self.trainer.max_steps,
+            initial_lr=self.optimizer_cfg.initial_lr,
+            min_lr=self.optimizer_cfg.min_lr,
+        )
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
-                "scheduler": warm_up,
+                "scheduler": lr_scheduler,
                 "interval": "step",
                 "frequency": 1,
             },
