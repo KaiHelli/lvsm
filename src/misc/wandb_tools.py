@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import glob
+from typing import Union, Optional
 
 import wandb
 
@@ -38,25 +41,44 @@ def download_checkpoint(
     chosen.download(root=root)
     return root / "model.ckpt"
 
-
-def update_checkpoint_path(path: str | None, wandb_cfg: dict) -> Path | None:
+def update_checkpoint_path(path: Optional[str], wandb_cfg: dict) -> Optional[Path]:
     if path is None:
         return None
 
-    if not str(path).startswith("wandb://"):
-        return Path(path)
+    # Check if path is a WandB URL
+    if path.startswith("wandb://"):
+        run_id, *version = path[len("wandb://"):].split(":")
+        if len(version) == 0:
+            version = None
+        elif len(version) == 1:
+            version = version[0]
+        else:
+            raise ValueError("Invalid version specifier!")
 
-    run_id, *version = path[len("wandb://") :].split(":")
-    if len(version) == 0:
-        version = None
-    elif len(version) == 1:
-        version = version[0]
-    else:
-        raise ValueError("Invalid version specifier!")
+        project = wandb_cfg["project"]
+        return download_checkpoint(
+            f"{project}/{run_id}",
+            Path("checkpoints"),
+            version,
+        )
 
-    project = wandb_cfg["project"]
-    return download_checkpoint(
-        f"{project}/{run_id}",
-        Path("checkpoints"),
-        version,
-    )
+    # Handle paths that do not start with "wandb://"
+    checkpoint_path = Path(path)
+    
+    # If the path does not contain regex patterns and exists as a single file
+    if checkpoint_path.is_file() and checkpoint_path.suffix == '.ckpt':
+        return checkpoint_path
+
+    # If the path has a pattern, use glob to find matching files
+    matches = glob.glob(str(checkpoint_path))
+    if not matches:
+        print("No checkpoints matched the pattern. Skipping.")
+        return None
+    
+    # Sort matches by creation time and get the newest file
+    newest_file = max(matches, key=lambda x: os.path.getctime(x))
+
+    # Print match
+    print(f"Found checkpoint: {newest_file}. Loading.")
+
+    return Path(newest_file)
