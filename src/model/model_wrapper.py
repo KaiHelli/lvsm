@@ -13,13 +13,14 @@ from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor, nn, optim
 import numpy as np
 import json
+from colorama import Fore
 
 from ..dataset.data_module import get_data_shim
 from ..dataset.types import BatchedExample, BatchedViewsRGBD
 from ..dataset import DatasetCfg
 from ..evaluation.metrics import compute_lpips, compute_psnr, compute_ssim
 from ..global_cfg import get_cfg
-from ..loss import Loss
+from ..loss import get_losses, LossCfgWrapper
 from ..misc.benchmarker import Benchmarker
 from ..misc.image_io import prep_image, save_image, save_video
 from ..misc.LocalLogger import LOG_PATH, LocalLogger
@@ -38,6 +39,7 @@ from ..visualization.layout import add_border, hcat, vcat
 from ..visualization import layout
 
 from .transformer.norm import LayerNorm
+from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
 
 @dataclass
@@ -79,8 +81,8 @@ class TrajectoryFn(Protocol):
 
 class ModelWrapper(LightningModule):
     logger: Optional[WandbLogger]
-    model: nn.Module
-    losses: nn.ModuleList
+    model_cfg: LVSMCfg
+    loss_cfg: list[LossCfgWrapper]
     optimizer_cfg: OptimizerCfg
     test_cfg: TestCfg
     train_cfg: TrainCfg
@@ -91,8 +93,8 @@ class ModelWrapper(LightningModule):
         optimizer_cfg: OptimizerCfg,
         test_cfg: TestCfg,
         train_cfg: TrainCfg,
-        model: nn.Module,
-        losses: list[Loss],
+        model_cfg: LVSMCfg,
+        loss_cfg: list[LossCfgWrapper],
         step_tracker: StepTracker | None,
     ) -> None:
         super().__init__()
@@ -103,9 +105,10 @@ class ModelWrapper(LightningModule):
         self.step_tracker = step_tracker
 
         # Set up the model.
-        self.model = model
+        self.model = LVSM.from_cfg(model_cfg)
+
         self.data_shim = get_data_shim(self.model)
-        self.losses = nn.ModuleList(losses)
+        self.losses = nn.ModuleList(get_losses(loss_cfg))
 
         # This is used for testing.
         self.benchmarker = Benchmarker()
@@ -144,12 +147,13 @@ class ModelWrapper(LightningModule):
 
         if self.global_rank == 0 and self.global_step % self.train_cfg.print_log_every_n_steps == 0:
             print(
-                f"train step {self.global_step}; "
-                f"scene = {[x[:20] for x in batch['scene']]}; "
-                f"context = {batch['context']['index'].tolist()}; "
+                Fore.RED + f"train" + Fore.RESET + f" | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}] | "
+                f"loss = {total_loss:.6f} | "
+                f"scene = {[x[:20] for x in batch['scene']]} | "
                 f"bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
-                f"{batch['context']['far'].detach().cpu().numpy().mean()}]; "
-                f"loss = {total_loss:.6f}"
+                f"{batch['context']['far'].detach().cpu().numpy().mean()}] | "
+                f"context = {batch['context']['index'].tolist()} | "
+                f"target = {batch['target']['index'].tolist()}"
             )
         self.log("info/near", batch["context"]["near"].detach().cpu().numpy().mean())
         self.log("info/far", batch["context"]["far"].detach().cpu().numpy().mean())
@@ -247,9 +251,10 @@ class ModelWrapper(LightningModule):
 
         if self.global_rank == 0:
             print(
-                f"validation step {self.global_step}; "
-                f"scene = {[a[:20] for a in batch['scene']]}; "
-                f"context = {batch['context']['index'].tolist()}"
+                Fore.YELLOW + f"val" + Fore.RESET + f"   | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}] | "
+                f"scene = {[a[:20] for a in batch['scene']]} | "
+                f"context = {batch['context']['index'].tolist()} | "
+                f"target = {batch['target']['index'].tolist()}"
             )
 
         b, _, _, h, w = batch["target"]["image"].shape

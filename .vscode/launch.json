@@ -10,7 +10,7 @@
             "request": "launch",
             "module": "src.main",
             "console": "integratedTerminal",
-            "args": ["+experiment=re10k", "mode=train", "checkpointing.resume=False"],
+            "args": ["+experiment=re10k", "mode=train", "checkpointing.resume=False", "wandb.mode=offline"],
         }
     ]
 }

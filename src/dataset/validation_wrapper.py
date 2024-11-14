@@ -26,7 +26,14 @@ class ValidationWrapper(Dataset):
         if isinstance(self.dataset, IterableDataset):
             if self.dataset_iterator is None:
                 self.dataset_iterator = iter(self.dataset)
-            return next(self.dataset_iterator)
+
+            # Get the next item, reset if exhausted
+            # This keeps an endless validation loop
+            item = next(self.dataset_iterator, None)
+            if item is None:
+                self.dataset_iterator = iter(self.dataset)
+                item = next(self.dataset_iterator)
+            return item
 
         random_index = torch.randint(0, len(self.dataset), tuple())
         return self.dataset[random_index.item()]

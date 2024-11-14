@@ -26,8 +26,12 @@ def get_data_shim(model: nn.Module) -> DataShim:
         shims.append(model.get_data_shim())
 
     def combined_shim(batch):
-        for shim in shims:
-            batch = shim(batch)
+        device_type = batch["target"]["image"].device.type
+        
+        # Disable mixed precision for operations on the dataset to keep the data integrity
+        with torch.autocast(device_type=device_type, enabled=False):
+            for shim in shims:
+                batch = shim(batch)
         return batch
 
     return combined_shim

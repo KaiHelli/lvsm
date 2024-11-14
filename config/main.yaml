@@ -21,7 +21,7 @@ data_loader:
   train:
     num_workers: 10
     persistent_workers: true
-    batch_size: 2 # was 4
+    batch_size: 3 # was 4
     seed: 1234
   test:
     num_workers: 4
@@ -68,9 +68,11 @@ seed: 111123
 
 trainer:
   max_steps: -1
-  val_check_interval: 0.5
-  gradient_clip_val: 0.5
+  val_check_interval: 1.0
+  gradient_clip_val: 0.5 # try to use 5.0
+  accumulate_grad_batches: 4
   num_sanity_val_steps: 2
   num_nodes: 1
+  precision: "bf16-mixed"
 
 output_dir: null

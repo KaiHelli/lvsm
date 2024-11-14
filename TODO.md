@@ -1,16 +1,24 @@
-- FlashAttention2 although masking required -> Use xformers or flexattention or pytorch kernels
-- Check bias for token linear layers in lvsm model
-- Set Bfloat16 as type for our model
-- Exclude LayerNorms from optimizer weight decay
-- Check for their weight init
-- Check for gradient clipping
-- Remove commented ray shims from dataloader if gpu works better
-- Check if checkpointing and loading works
-- Add QK-Norm
+## ToDo
 
-Questions:
-- Plucker ray computation implemented correctly?
-- Talk about LPIPS loss
-- Talk about attention masking (src->src, tgt->tgt, tgt->src)
-- Storage space on SL21 / SL08 compute nodes
-- Upgrade cuda version from 12.2 to 12.4 or allow in parallel
+- FlashAttention2 although masking required -> Use xformers or FlexAttention or PyTorch kernels
+- Add support for QK-Norm in our Model
+- Consider the transformer weight initialization of LVSM with std of $\frac{(0.02)}{(2(i+1))^{\frac{1}{2}}} = \frac{1}{50\sqrt{2(i+1)}}$ where $i$ is the index of the transformer layer
+- Fix BFloat16 error in Projection on GPU
+- Add 3D visualisations of the cameras in space along with the image planes (PyTorch 3D / Open3D) - Check for correct parametrization (OpenCV vs. PyTorch 3D)
+- Add suport for sampling more than 2 context views per batch.
+
+## Verify
+- Verify Plucker Ray implementation
+- Verify correct checkpointing/loading e.g. is the state fully restored?
+- Verify/Tune the gradient clipping limits (currently only based on norm not on absolute value)
+- Verify attention masking (src->src, tgt->tgt, tgt->src)
+
+## Code Cleanup
+- Remove commented ray shims from dataloader if gpu works better
+- Cleanup leftover MVSplat configurations and non-compatible functions
+
+## Architectural Questions
+- Does LVSM also exclude biases on the linear tokenize/untokenize projections?
+
+## Optional Enhancements
+- Continue the same wandb run in case a checkpoint is loaded that started from a run before

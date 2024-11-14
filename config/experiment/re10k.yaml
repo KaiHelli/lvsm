@@ -10,7 +10,7 @@ wandb:
 
 data_loader:
   train:
-    batch_size: 2
+    batch_size: 3
 
 trainer:
   max_steps: 100_001

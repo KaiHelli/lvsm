@@ -23,12 +23,10 @@ with install_import_hook(
     from src.config import load_typed_root_config
     from src.dataset.data_module import DataModule
     from src.global_cfg import set_cfg
-    from src.loss import get_losses
     from src.misc.LocalLogger import LocalLogger
     from src.misc.step_tracker import StepTracker
     from src.misc.wandb_tools import update_checkpoint_path
     from src.model.model_wrapper import ModelWrapper
-    from src.model.lvsm import LVSM
 
 
 def cyan(text: str) -> str:
@@ -110,19 +108,19 @@ def train(cfg_dict: DictConfig):
         val_check_interval=cfg.trainer.val_check_interval,
         enable_progress_bar=cfg.mode == "test",
         gradient_clip_val=cfg.trainer.gradient_clip_val,
+        accumulate_grad_batches=cfg.trainer.accumulate_grad_batches,
         max_steps=cfg.trainer.max_steps,
         num_sanity_val_steps=cfg.trainer.num_sanity_val_steps,
+        precision=cfg.trainer.precision,
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
-
-    model = LVSM.from_cfg(cfg=cfg.model.lvsm)
 
     model_kwargs = {
         "optimizer_cfg": cfg.optimizer,
         "test_cfg": cfg.test,
         "train_cfg": cfg.train,
-        "model": model,
-        "losses": get_losses(cfg.loss),
+        "model_cfg": cfg.model.lvsm,
+        "loss_cfg": cfg.loss,
         "step_tracker": step_tracker,
     }
     if cfg.mode == "train" and checkpoint_path is not None and not cfg.checkpointing.resume:
