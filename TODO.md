@@ -3,9 +3,9 @@
 - FlashAttention2 although masking required -> Use xformers or FlexAttention or PyTorch kernels
 - Add support for QK-Norm in our Model
 - Consider the transformer weight initialization of LVSM with std of $\frac{(0.02)}{(2(i+1))^{\frac{1}{2}}} = \frac{1}{50\sqrt{2(i+1)}}$ where $i$ is the index of the transformer layer
-- Fix BFloat16 error in Projection on GPU
 - Add 3D visualisations of the cameras in space along with the image planes (PyTorch 3D / Open3D) - Check for correct parametrization (OpenCV vs. PyTorch 3D)
 - Add suport for sampling more than 2 context views per batch.
+- Add mse and total loss to validation wandb charts
 
 ## Verify
 - Verify Plucker Ray implementation

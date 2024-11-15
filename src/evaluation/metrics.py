@@ -41,7 +41,7 @@ def compute_ssim(
     ssim = [
         structural_similarity(
             gt.detach().cpu().float().numpy(),  # Convert to float in case of bf16 tensors
-            hat.detach().cpu().float().numpy(), # Convert to float in case of bf16 tensors
+            hat.detach().cpu().float().numpy(),  # Convert to float in case of bf16 tensors
             win_size=11,
             gaussian_weights=True,
             channel_axis=0,

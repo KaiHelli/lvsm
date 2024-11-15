@@ -42,6 +42,7 @@ from .transformer.norm import LayerNorm
 from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
 
+
 @dataclass
 class OptimizerCfg:
     lr: float
@@ -51,6 +52,7 @@ class OptimizerCfg:
     weight_decay: float
     initial_lr: float
     min_lr: float
+
 
 @dataclass
 class TestCfg:
@@ -72,10 +74,7 @@ class TrajectoryFn(Protocol):
     def __call__(
         self,
         t: Float[Tensor, " t"],
-    ) -> tuple[
-        Float[Tensor, "batch view 4 4"],  # extrinsics
-        Float[Tensor, "batch view 3 3"],  # intrinsics
-    ]:
+    ) -> tuple[Float[Tensor, "batch view 4 4"], Float[Tensor, "batch view 3 3"],]:  # extrinsics  # intrinsics
         pass
 
 
@@ -114,6 +113,7 @@ class ModelWrapper(LightningModule):
         self.benchmarker = Benchmarker()
         self.eval_cnt = 0
 
+        # TODO: Still needed?
         if self.test_cfg.compute_scores:
             self.test_step_outputs = {}
             self.time_skip_steps_dict = {"model": 0}
@@ -123,7 +123,9 @@ class ModelWrapper(LightningModule):
         _, _, _, h, w = batch["target"]["image"].shape
 
         # Run the model.
-        output = self.model(batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"])
+        output = self.model(
+            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"]
+        )
 
         # Type the output.
         output = BatchedViewsRGBD({"color": output, "depth": None})
@@ -147,7 +149,10 @@ class ModelWrapper(LightningModule):
 
         if self.global_rank == 0 and self.global_step % self.train_cfg.print_log_every_n_steps == 0:
             print(
-                Fore.RED + f"train" + Fore.RESET + f" | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}] | "
+                Fore.RED
+                + f"train"
+                + Fore.RESET
+                + f" | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}] | "
                 f"loss = {total_loss:.6f} | "
                 f"scene = {[x[:20] for x in batch['scene']]} | "
                 f"bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
@@ -172,7 +177,9 @@ class ModelWrapper(LightningModule):
 
         # Run the model.
         with self.benchmarker.time("model"):
-            output = self.model(batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"])
+            output = self.model(
+                batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"]
+            )
 
         # Type the output.
         output = BatchedViewsRGBD({"color": output, "depth": None})
@@ -199,7 +206,7 @@ class ModelWrapper(LightningModule):
         # compute scores
         if self.test_cfg.compute_scores:
             if batch_idx < self.test_cfg.eval_time_skip_steps:
-                self.time_skip_steps_dict["model"] += 1 #TODO: += v?
+                self.time_skip_steps_dict["model"] += 1  # TODO: += v?
 
             rgb = images_prob
 
@@ -213,7 +220,6 @@ class ModelWrapper(LightningModule):
             self.test_step_outputs[f"psnr"].append(compute_psnr(rgb_gt, rgb).mean().item())
             self.test_step_outputs[f"ssim"].append(compute_ssim(rgb_gt, rgb).mean().item())
             self.test_step_outputs[f"lpips"].append(compute_lpips(rgb_gt, rgb).mean().item())
-
 
     def on_test_end(self) -> None:
         name = get_cfg()["wandb"]["name"]
@@ -251,7 +257,10 @@ class ModelWrapper(LightningModule):
 
         if self.global_rank == 0:
             print(
-                Fore.YELLOW + f"val" + Fore.RESET + f"   | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}] | "
+                Fore.YELLOW
+                + f"val"
+                + Fore.RESET
+                + f"   | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}] | "
                 f"scene = {[a[:20] for a in batch['scene']]} | "
                 f"context = {batch['context']['index'].tolist()} | "
                 f"target = {batch['target']['index'].tolist()}"
@@ -261,7 +270,9 @@ class ModelWrapper(LightningModule):
         assert b == 1
 
         # Run the model.
-        output = self.model(batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"])
+        output = self.model(
+            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"]
+        )
 
         # Type the output.
         output = BatchedViewsRGBD({"color": output, "depth": None})
@@ -295,7 +306,7 @@ class ModelWrapper(LightningModule):
         # Run video validation step.
         # self.render_video_interpolation(batch)
         # self.render_video_wobble(batch)
-        #if self.train_cfg.extended_visualization:
+        # if self.train_cfg.extended_visualization:
         #    self.render_video_interpolation_exaggerated(batch)
 
     @rank_zero_only
@@ -462,7 +473,7 @@ class ModelWrapper(LightningModule):
         decay = set()
         no_decay = set()
 
-        whitelist_weight_modules = (nn.Linear, )
+        whitelist_weight_modules = (nn.Linear,)
         blacklist_weight_modules = (nn.LayerNorm, LayerNorm, nn.Embedding)
 
         for module_name, module in self.named_modules():
@@ -484,15 +495,22 @@ class ModelWrapper(LightningModule):
         inter_params = decay & no_decay
         union_params = decay | no_decay
         assert len(inter_params) == 0, f"parameters {inter_params} made it into both decay/no_decay sets!"
-        assert len(param_dict.keys() - union_params) == 0, f"parameters {param_dict.keys() - union_params} were not separated into either decay/no_decay set!"
+        assert (
+            len(param_dict.keys() - union_params) == 0
+        ), f"parameters {param_dict.keys() - union_params} were not separated into either decay/no_decay set!"
 
         # create optimizer groups
         optim_groups = [
-            {"params": [param_dict[param_name] for param_name in sorted(list(decay))], "weight_decay": self.optimizer_cfg.weight_decay},
+            {
+                "params": [param_dict[param_name] for param_name in sorted(list(decay))],
+                "weight_decay": self.optimizer_cfg.weight_decay,
+            },
             {"params": [param_dict[param_name] for param_name in sorted(list(no_decay))], "weight_decay": 0.0},
         ]
 
-        optimizer = optim.AdamW(optim_groups, lr=self.optimizer_cfg.lr, betas=(self.optimizer_cfg.beta_1, self.optimizer_cfg.beta_2))
+        optimizer = optim.AdamW(
+            optim_groups, lr=self.optimizer_cfg.lr, betas=(self.optimizer_cfg.beta_1, self.optimizer_cfg.beta_2)
+        )
 
         lr_scheduler = WarmupCosineLR(
             optimizer,

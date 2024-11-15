@@ -120,7 +120,9 @@ class Transformer(torch.nn.Module):
         if self.decoder is not None and tgt is not None:
             if enc_output is None:
                 raise ValueError("Decoder-only transformer requires non-null target input (tgt).")
-            dec_output = self.decoder(tgt, enc_output, causal=tgt_causal, self_attn_mask=tgt_sa_mask, cross_attn_mask=tgt_ca_mask)
+            dec_output = self.decoder(
+                tgt, enc_output, causal=tgt_causal, self_attn_mask=tgt_sa_mask, cross_attn_mask=tgt_ca_mask
+            )
             return dec_output
 
         if self.encoder is not None and self.decoder is None:

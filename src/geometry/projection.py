@@ -90,10 +90,7 @@ def get_world_rays(
     coordinates: Float[Tensor, "*#batch dim"],
     extrinsics: Float[Tensor, "*#batch dim+2 dim+2"],
     intrinsics: Float[Tensor, "*#batch dim+1 dim+1"],
-) -> tuple[
-    Float[Tensor, "*batch dim+1"],  # origins
-    Float[Tensor, "*batch dim+1"],  # directions
-]:
+) -> tuple[Float[Tensor, "*batch dim+1"], Float[Tensor, "*batch dim+1"],]:  # origins  # directions
     # Get camera-space ray directions.
     directions = unproject(
         coordinates,
@@ -113,7 +110,9 @@ def get_world_rays(
 
 
 def calculate_plucker_rays(
-    image: Float[Tensor, "*#batch c h w"], extrinsics: Float[Tensor, "*#batch 4 4"], intrinsics: Float[Tensor, "*#batch 3 3"]
+    image: Float[Tensor, "*#batch c h w"],
+    extrinsics: Float[Tensor, "*#batch 4 4"],
+    intrinsics: Float[Tensor, "*#batch 3 3"],
 ) -> Float[Tensor, "*batch 6 h w"]:
     b, v, _, *grid_shape = image.shape
 
@@ -138,9 +137,11 @@ def calculate_plucker_rays(
     return plucker_rays
 
 
-def plucker_to_point_direction(plucker_rays: Float[Tensor, "*batch 6 h w"], normalize_moment=True) -> Float[Tensor, "*batch 6 h w"]:
+def plucker_to_point_direction(
+    plucker_rays: Float[Tensor, "*batch 6 h w"], normalize_moment=True
+) -> Float[Tensor, "*batch 6 h w"]:
     """
-    Convert Plücker rays <D, OxD> to point-direction representation <O, D>. 
+    Convert Plücker rays <D, OxD> to point-direction representation <O, D>.
 
     Args:
         plucker_rays: A tensor representing Plücker rays, shape: (b, n, 6, h, w)
@@ -166,7 +167,7 @@ def plucker_to_point_direction(plucker_rays: Float[Tensor, "*batch 6 h w"], norm
     if normalize_moment:
         c = torch.norm(L, dim=-1, keepdim=True)
         M = M / c
-    
+
     points = torch.cross(L, M, dim=-1)
 
     return torch.cat((points, direction), dim=-1)
@@ -237,6 +238,7 @@ def plot_plucker_rays(image, plucker_rays, step=16):
     
     print(f"Plot saved as {filename}")
     """
+
 
 def sample_image_grid(
     shape: tuple[int, ...],

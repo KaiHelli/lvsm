@@ -8,10 +8,7 @@ def sample_discrete_distribution(
     pdf: Float[Tensor, "*batch bucket"],
     num_samples: int,
     eps: float = torch.finfo(torch.float32).eps,
-) -> tuple[
-    Int64[Tensor, "*batch sample"],  # index
-    Float[Tensor, "*batch sample"],  # probability density
-]:
+) -> tuple[Int64[Tensor, "*batch sample"], Float[Tensor, "*batch sample"],]:  # index  # probability density
     *batch, bucket = pdf.shape
     normalized_pdf = pdf / (eps + reduce(pdf, "... bucket -> ... ()", "sum"))
     cdf = normalized_pdf.cumsum(dim=-1)
@@ -24,10 +21,7 @@ def gather_discrete_topk(
     pdf: Float[Tensor, "*batch bucket"],
     num_samples: int,
     eps: float = torch.finfo(torch.float32).eps,
-) -> tuple[
-    Int64[Tensor, "*batch sample"],  # index
-    Float[Tensor, "*batch sample"],  # probability density
-]:
+) -> tuple[Int64[Tensor, "*batch sample"], Float[Tensor, "*batch sample"],]:  # index  # probability density
     normalized_pdf = pdf / (eps + reduce(pdf, "... bucket -> ... ()", "sum"))
     index = pdf.topk(k=num_samples, dim=-1).indices
     return index, normalized_pdf.gather(dim=-1, index=index)

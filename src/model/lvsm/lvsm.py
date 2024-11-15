@@ -7,6 +7,7 @@ from ..transformer.norm import LayerNorm
 from src.dataset.types import DataShim
 from src.dataset.shims.plucker_rays import generate_rays_batch
 
+
 @dataclass
 class LVSMCfg:
     patch_size: int
@@ -41,12 +42,12 @@ class LVSM(torch.nn.Module):
         # TODO: set bias as false in those linear layers as well?
         self.tokenize_input = torch.nn.Sequential(
             Rearrange("b n c (h ph) (w pw) -> b n h w (c ph pw)", ph=patch_size, pw=patch_size),
-            torch.nn.Linear((num_channels + 6) * (patch_size**2), transformer_cfg.d_model)
+            torch.nn.Linear((num_channels + 6) * (patch_size**2), transformer_cfg.d_model),
         )
 
         self.tokenize_target = torch.nn.Sequential(
             Rearrange("b n c (h ph) (w pw) -> b n h w (c ph pw)", ph=patch_size, pw=patch_size),
-            torch.nn.Linear(6 * (patch_size**2), transformer_cfg.d_model)
+            torch.nn.Linear(6 * (patch_size**2), transformer_cfg.d_model),
         )
 
         self.untokenize_output = torch.nn.Sequential(
@@ -93,7 +94,7 @@ class LVSM(torch.nn.Module):
 
         # Step 3: Fill in target-to-source and source-to-source attention.
         # Target tokens attend to all source tokens for contextual information.
-        final_attn_mask[:, :tkn_src.shape[1]] = True
+        final_attn_mask[:, : tkn_src.shape[1]] = True
 
         # Example with 1 source view (2 tokens) and 2 target views (each with 2 tokens):
         # [ 1 1 | 0 0 0 0 ]  <- Source tokens do only attend to themselves.
@@ -108,15 +109,17 @@ class LVSM(torch.nn.Module):
         # - The upper left block (zero_mask) indicates that source tokens do not attend to any tokens.
         # - The lower left blocks (tgt_src_attn_mask) indicate that target tokens attend to all source tokens.
         # - The lower right blocks (tgt_attn_mask) represent intra-target attention, where tokens in the same group can attend to each other.
-        
+
         tkn_out = self.transformer(src=tkn_in, src_mask=final_attn_mask)
 
         # Separate the target tokens from the source tokens
         tkn_tgt_out = tkn_out[:, num_src_tokens:]
 
         # Unflatten the sequence dimension
-        tkn_tgt_out = rearrange(tkn_tgt_out, "b (n h w) d -> b n h w d", n=tgt_seq_shape[0], h=tgt_seq_shape[1], w=tgt_seq_shape[2])
-        
+        tkn_tgt_out = rearrange(
+            tkn_tgt_out, "b (n h w) d -> b n h w d", n=tgt_seq_shape[0], h=tgt_seq_shape[1], w=tgt_seq_shape[2]
+        )
+
         # Untokenize the output
         tgt_img = self.untokenize_output(tkn_tgt_out)
 

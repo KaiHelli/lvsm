@@ -97,7 +97,7 @@ class ViewSamplerBounded(ViewSampler[ViewSamplerBoundedCfg]):
             # When training or validating (visualizing), pick at random.
             index_target = torch.randint(
                 index_context_left + self.cfg.min_distance_to_context_views,
-                index_context_right + 1 - self.cfg.min_distance_to_context_views, # Ends are exclusive in randint
+                index_context_right + 1 - self.cfg.min_distance_to_context_views,  # Ends are exclusive in randint
                 size=(self.cfg.num_target_views,),
                 device=device,
             )
@@ -106,10 +106,10 @@ class ViewSamplerBounded(ViewSampler[ViewSamplerBoundedCfg]):
                 # In case of overfitting choose targets evenly spaced between context views, respecting the min distance.
                 index_target = torch.linspace(
                     index_context_left + self.cfg.min_distance_to_context_views,
-                    index_context_right - self.cfg.min_distance_to_context_views, # Ends are inclusive in linspace
+                    index_context_right - self.cfg.min_distance_to_context_views,  # Ends are inclusive in linspace
                     steps=self.cfg.num_target_views,
                     device=device,
-                    dtype=torch.int
+                    dtype=torch.long,
                 )
 
         # Apply modulo for circular datasets.

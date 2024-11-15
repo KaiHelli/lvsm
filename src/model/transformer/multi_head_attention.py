@@ -56,7 +56,7 @@ class MultiHeadAttention(torch.nn.Module):
         else:
             self.qkv_proj = torch.nn.Linear(d_model, 2 * self.d_k_total + self.d_v_total, bias=self.bias)
 
-        self.o_proj = torch.nn.Linear(self.d_v_total, d_model)
+        self.o_proj = torch.nn.Linear(self.d_v_total, d_model, bias=self.bias)
 
         # Initialize parameters
         self._reset_parameters()
@@ -141,9 +141,7 @@ class MultiHeadAttention(torch.nn.Module):
             assert attn_mask is None, "Attention mask is not supported with FlashAttention for self-attention."
 
             # Use FlashAttention for self-attention if available and suitable
-            output = flash_attn_qkvpacked_func(
-                qkv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal
-            )
+            output = flash_attn_qkvpacked_func(qkv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal)
             output = rearrange(output, "b s h d -> b s (h d)")
             return output
         elif use_flash_attention and self.cross_attn:
@@ -151,9 +149,7 @@ class MultiHeadAttention(torch.nn.Module):
             assert attn_mask is None, "Attention mask is not supported with FlashAttention for cross-attention."
 
             # Use FlashAttention for cross-attention if available and suitable
-            output = flash_attn_kvpacked_func(
-                q, kv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal
-            )
+            output = flash_attn_kvpacked_func(q, kv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal)
             return rearrange(output, "b s h d -> b s (h d)")
         elif parse_version(torch.__version__) >= parse_version("2.0.0"):
             # Use torch's scaled_dot_product_attention with SDP kernel in torch >= 2.0
@@ -237,10 +233,3 @@ class MultiHeadAttention(torch.nn.Module):
             qkv = self.qkv_proj(x)
             qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
             return qkv, None, None
-
-
-# Example usage:
-# mha = MultiHeadAttention(d_model=512, d_k=64, d_v=64, num_heads=8, dropout_p=0.1, cross_attn=True)
-# x = torch.randn(32, 10, 512)  # Example input
-# x_kv = torch.randn(32, 15, 512)  # Example input for cross-attention
-# output = mha(x, x_kv)  # Forward pass with cross-attention

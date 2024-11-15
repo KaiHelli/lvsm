@@ -150,7 +150,6 @@ def test_transformer_equivalence(device, torch_version, pre_norm):
         "torch.__version__",
         new=torch_version if torch_version is not None else torch.__version__,
     ):
-
         reference_model, our_model = setup_models(pre_norm)
         reference_model.to(device)
         our_model.to(device)

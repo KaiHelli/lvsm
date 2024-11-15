@@ -27,7 +27,7 @@ def get_data_shim(model: nn.Module) -> DataShim:
 
     def combined_shim(batch):
         device_type = batch["target"]["image"].device.type
-        
+
         # Disable mixed precision for operations on the dataset to keep the data integrity
         with torch.autocast(device_type=device_type, enabled=False):
             for shim in shims:
@@ -45,8 +45,8 @@ class DataLoaderStageCfg:
     seed: int | None
 
 
-#@dataclass
-#class DataLoaderShimCfg:
+# @dataclass
+# class DataLoaderShimCfg:
 #    calculate_rays: bool
 
 
@@ -55,13 +55,15 @@ class DataLoaderCfg:
     train: DataLoaderStageCfg
     test: DataLoaderStageCfg
     val: DataLoaderStageCfg
+
+
 #    shims: DataLoaderShimCfg
 
 
 DatasetShim = Callable[[Dataset, Stage], Dataset]
 
 
-#class RayCollateFn:
+# class RayCollateFn:
 #    """Callable class for the ray collate function, to ensure it is pickleable."""
 
 #    def __init__(self) -> None:
@@ -104,8 +106,8 @@ class DataModule(LightningDataModule):
         self.global_rank = global_rank
         self.collate_fn = None
 
-#        if self.data_loader_cfg.shims.calculate_rays:
-#            self.collate_fn = RayCollateFn()
+    #        if self.data_loader_cfg.shims.calculate_rays:
+    #            self.collate_fn = RayCollateFn()
 
     def get_persistent(self, loader_cfg: DataLoaderStageCfg) -> bool | None:
         return None if loader_cfg.num_workers == 0 else loader_cfg.persistent_workers
