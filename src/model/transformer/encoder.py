@@ -5,7 +5,7 @@ from .activations import get_activation_fn, get_weight_init_fn
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, d_model, d_k, d_v, num_heads, d_ff, dropout_p, *, activation="relu", bias=True, pre_norm=False):
+    def __init__(self, d_model, d_k, d_v, num_heads, d_ff, dropout_p, *, activation="relu", bias=True, pre_norm=False, qk_norm = False):
         """
         Encoder block for the Transformer model.
 
@@ -29,6 +29,7 @@ class EncoderBlock(nn.Module):
             dropout_p=dropout_p,
             cross_attn=False,
             bias=bias,
+            qk_norm= qk_norm
         )
 
         # Feedforward layer

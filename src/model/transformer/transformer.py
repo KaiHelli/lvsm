@@ -18,6 +18,7 @@ class TransformerCfg:
     bias: bool
     activation: str
     pre_norm: bool
+    qk_norm: bool
 
 
 class Transformer(torch.nn.Module):
@@ -35,6 +36,7 @@ class Transformer(torch.nn.Module):
             activation=cfg.activation,
             bias=cfg.bias,
             pre_norm=cfg.pre_norm,
+            qk_norm = cfg.qk_norm,
         )
 
     def __init__(
@@ -51,6 +53,7 @@ class Transformer(torch.nn.Module):
         activation="relu",
         bias=True,
         pre_norm=False,
+        qk_norm = False,
     ):
         """
         Transformer model that can be used as encoder-decoder, encoder-only, or decoder-only.
@@ -81,6 +84,7 @@ class Transformer(torch.nn.Module):
                 bias=bias,
                 activation=activation,
                 pre_norm=pre_norm,
+                qk_norm= qk_norm,
             )
         else:
             self.encoder = None

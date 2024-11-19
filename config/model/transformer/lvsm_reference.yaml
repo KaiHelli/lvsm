@@ -9,3 +9,4 @@ num_decoder_layers: 0
 bias: false
 activation: gelu
 pre_norm: true
+qk_norm:false

@@ -25,7 +25,7 @@ except (ModuleNotFoundError, ImportError):
 
 
 class MultiHeadAttention(torch.nn.Module):
-    def __init__(self, d_model, d_k, d_v, num_heads, dropout_p=0.1, cross_attn=False, bias=True):
+    def __init__(self, d_model, d_k, d_v, num_heads, dropout_p=0.1, cross_attn=False, bias=True, qk_norm= False):
         """
         Multi-head attention mechanism.
 
@@ -48,6 +48,17 @@ class MultiHeadAttention(torch.nn.Module):
         self.dropout_p = dropout_p
         self.cross_attn = cross_attn
         self.bias = bias
+        self.qk_norm = qk_norm
+        # Initialize as a float32 tensor with requires_grad
+        # Creare il tensore
+        log_value = torch.log2(torch.tensor(d_model**2 - d_model, dtype=torch.float32))
+
+        # Inizializzare come parametro
+        self.qk_norm_parameter = torch.nn.Parameter(log_value)
+
+
+        # This ensures that the tensor is of a floating-point type and can require gradients
+        self.qk_norm_parameter.requires_grad = True
 
         # Linear layers for projecting input to query, key, and value
         if self.cross_attn:
@@ -136,7 +147,7 @@ class MultiHeadAttention(torch.nn.Module):
             )
         )
 
-        if use_flash_attention and not self.cross_attn:
+        if use_flash_attention and not self.cross_attn and not self.qk_norm:
             assert qkv is not None, "qkv tensor is required for self-attention."
             assert attn_mask is None, "Attention mask is not supported with FlashAttention for self-attention."
 
@@ -144,13 +155,52 @@ class MultiHeadAttention(torch.nn.Module):
             output = flash_attn_qkvpacked_func(qkv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal)
             output = rearrange(output, "b s h d -> b s (h d)")
             return output
-        elif use_flash_attention and self.cross_attn:
+        
+        elif use_flash_attention and self.cross_attn and not self.qk_norm:
             assert q is not None and kv is not None, "q and kv tensors are required for cross-attention."
             assert attn_mask is None, "Attention mask is not supported with FlashAttention for cross-attention."
 
             # Use FlashAttention for cross-attention if available and suitable
             output = flash_attn_kvpacked_func(q, kv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal)
             return rearrange(output, "b s h d -> b s (h d)")
+        
+        elif use_flash_attention and not self.cross_attn and self.qk_norm:
+            assert qkv is not None, "qkv tensor is required for self-attention."
+            assert attn_mask is None, "Attention mask is not supported with FlashAttention for self-attention."
+
+            #Normalize with l2 norm Q and K 
+            #First get dimension that we want to normalize over
+            #2 means that I want to normalize Q and K indipendently, 3 to normalize over num_heads, 0 because it has to be for each batch
+            dim = (0,2,3)
+            #Only normalize over Q and K so slice [:, :, :2, :, :]
+            qkv = self.normalize_rows_l2_until(qkv[:, :, :2, :, :], dim)
+            #Scale by the learnable parameter and sqrt(d_k), since flash attention then will divide it, and learnable parametewr
+            qkv[:, :, 1, :, :] = qkv[:, :, 1, :, :] * math.sqrt(self.d_k) * self.qk_norm_parameter
+
+            # Use FlashAttention for self-attention if available and suitable
+            output = flash_attn_qkvpacked_func(qkv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal)
+            output = rearrange(output, "b s h d -> b s (h d)")
+            return output
+        
+        elif use_flash_attention and self.cross_attn and self.qk_norm:
+            assert q is not None and kv is not None, "q and kv tensors are required for cross-attention."
+            assert attn_mask is None, "Attention mask is not supported with FlashAttention for cross-attention."
+
+            #Normalize with l2 norm Q over batchsize and num_heads
+            q = self.normalize_rows_l2(q,dim=(0,2))
+            #First get dimension that we want to normalize over
+            #0 is for batchszie 2 for num_heads since i only give k of kv
+            dim = (0,2)
+            #Only normalize over Q and K so slice [:, :, :2, :, :]
+            kv = self.normalize_rows_l2(qkv[:, :, 1, :, :], dim)
+            #Scale by the learnable parameter and sqrt(d_k), since flash attention then will divide it 
+            q = v * math.sqrt(self.d_k) * self.qk_norm_parameter
+           
+
+            # Use FlashAttention for cross-attention if available and suitable
+            output = flash_attn_kvpacked_func(q, kv, dropout_p=self.dropout_p if self.training else 0.0, causal=causal)
+            return rearrange(output, "b s h d -> b s (h d)")
+
         elif parse_version(torch.__version__) >= parse_version("2.0.0"):
             # Use torch's scaled_dot_product_attention with SDP kernel in torch >= 2.0
             backends = []
@@ -171,7 +221,12 @@ class MultiHeadAttention(torch.nn.Module):
                     q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
                 else:
                     raise ValueError("Invalid inputs for attention computation.")
-
+                
+                #if qk norm i normalize q and k and multiply the parameter and qrtof dk
+                if (self.qk_norm):
+                    q = self.normalize_rows_l2(q, dim = 2) * math.sqrt(self.d_k) * self.qk_norm_parameter
+                    k = self.normalize_rows_l2(k, dim = 2) 
+                    
                 attention_head_outputs = torch.nn.functional.scaled_dot_product_attention(
                     q.transpose(1, 2),
                     k.transpose(1, 2),
@@ -190,6 +245,10 @@ class MultiHeadAttention(torch.nn.Module):
                 q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
             else:
                 raise ValueError("Invalid inputs for attention computation.")
+            
+            if (self.qk_norm):
+                    q = self.normalize_rows_l2(q, dim = 2) * math.sqrt(self.d_k) * self.qk_norm_parameter
+                    k = self.normalize_rows_l2(k, dim = 2) 
 
             logits = torch.einsum("bnhd,bmhd->bhnm", q, k)
             scaling_factor = 1 / math.sqrt(self.d_k)
@@ -233,3 +292,21 @@ class MultiHeadAttention(torch.nn.Module):
             qkv = self.qkv_proj(x)
             qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
             return qkv, None, None
+        
+    def normalize_rows_l2(self, matrix: torch.Tensor, dim : tuple) -> torch.Tensor:
+        #Gets matrix and the dimension in which I want to calculate the norm. In the QKnorm paper
+        #They state that we should normalize over the rows of Q and K, however since we stacked the matrices
+        #We need to be careful on how to normalize
+        
+        # Calculate l2 norm till rowlimiti
+        row_norms = torch.norm(matrix, p=2, dim = dim, keepdim=True)
+    
+        # To not divide for 0 
+        row_norms[row_norms == 0] = 1
+
+        #Normalize
+        normalized_matrix = matrix / row_norms  
+    
+        return normalized_matrix
+
+

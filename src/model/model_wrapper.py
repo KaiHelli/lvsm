@@ -498,14 +498,13 @@ class ModelWrapper(LightningModule):
             for param_name, param in module.named_parameters():
                 full_param_name = f"{module_name}.{param_name}" if module_name else param_name
 
-                if param_name.endswith("bias"):
-                    # Exclude biases from weight decay.
+                if param_name == "qk_norm_parameter":  # Se il nome del parametro è quello che cerchi
+                    no_decay.add(full_param_name)
+                elif param_name.endswith("bias"):
                     no_decay.add(full_param_name)
                 elif param_name == "weight" and isinstance(module, whitelist_weight_modules):
-                    # Include weights of certain modules in weight decay.
                     decay.add(full_param_name)
                 elif param_name == "weight" and isinstance(module, blacklist_weight_modules):
-                    # Exclude weights of certain modules from weight decay.
                     no_decay.add(full_param_name)
 
         # validate that we considered every parameter
