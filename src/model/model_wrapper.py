@@ -37,10 +37,13 @@ from ..visualization.camera_trajectory.wobble import (
 from ..visualization.color_map import apply_color_map_to_image
 from ..visualization.layout import add_border, hcat, vcat
 from ..visualization import layout
+from ..geometry.p3d_visualize_scene import visualize_scene
 
 from .transformer.norm import LayerNorm
 from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
+import plotly.io as pio
+from wandb import Html
 
 
 @dataclass
@@ -74,7 +77,10 @@ class TrajectoryFn(Protocol):
     def __call__(
         self,
         t: Float[Tensor, " t"],
-    ) -> tuple[Float[Tensor, "batch view 4 4"], Float[Tensor, "batch view 3 3"],]:  # extrinsics  # intrinsics
+    ) -> tuple[
+        Float[Tensor, "batch view 4 4"],
+        Float[Tensor, "batch view 3 3"],
+    ]:  # extrinsics  # intrinsics
         pass
 
 
@@ -301,6 +307,18 @@ class ModelWrapper(LightningModule):
             step=self.global_step,
             caption=batch["scene"],
         )
+
+        # Visualize scene.
+        images = torch.stack((*batch["context"]["image"][0], *batch["target"]["image"][0]), dim=0)
+        intrinsics = torch.stack((*batch["context"]["intrinsics"][0], *batch["target"]["intrinsics"][0]), dim=0)
+        extrinsics = torch.stack((*batch["context"]["extrinsics"][0], *batch["target"]["extrinsics"][0]), dim=0)
+        with torch.amp.autocast("cuda" if images.is_cuda else "cpu", enabled=False):
+            fig = visualize_scene(images, extrinsics, intrinsics)
+
+        html_str = pio.to_html(fig, auto_play=False)
+        html = wandb.Html(html_str)
+
+        self.logger.log_table("scene", columns=["scene_html"], data=[[html]], step=self.global_step)
 
         # TODO: Look at this.
         # Run video validation step.

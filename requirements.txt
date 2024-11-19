@@ -32,4 +32,10 @@ pytest>=8.3.3
 
 # Currently torch < 2.4.1 does not work with numpy > 2.0, which is selected for intel macs.
 # See https://github.com/pytorch/pytorch/issues/135013
-# numpy<2; sys_platform=="darwin" and platform_machine=="x86_64"
+# Also Open3D 0.18.0 is not compatible with numpy >= 2.0
+# See https://github.com/isl-org/Open3D/issues/6840
+open3d>=0.18.0
+numpy<2
+
+# Optional, apply only for MacOS
+# numpy<2 #; sys_platform=="darwin" and platform_machine=="x86_64"

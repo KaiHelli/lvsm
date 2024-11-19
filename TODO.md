@@ -22,3 +22,6 @@
 
 ## Optional Enhancements
 - Continue the same wandb run in case a checkpoint is loaded that started from a run before
+
+## Discussion
+- Discuss presentation with Lukas

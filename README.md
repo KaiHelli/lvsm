@@ -15,6 +15,11 @@ conda create -n lvsm python=3.10
 conda activate lvsm
 # In case a different CUDA version than the default (12.4) is required, execute the following line with the correct version specified.
 pip install 'torch>=2.5.1' 'torchvision>=0.20' --index-url https://download.pytorch.org/whl/cu121
+# In case 3D scene visualisations are needed, install PyTorch3D (fvcore is not needed as a requirement since PyTorch3D v0.7.8)
+# Make sure torch and torchvision is installed first using the line above.
+pip install ninja iopath
+pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+# Install the rest of the requirements
 pip install -r requirements.txt
 ```
 

@@ -32,6 +32,18 @@ class LocalLogger(Logger):
         pass
 
     @rank_zero_only
+    def log_table(
+        self,
+        key: str,
+        columns: Optional[list[str]] = None,
+        data: Optional[list[list[Any]]] = None,
+        dataframe: Any = None,
+        step: Optional[int] = None,
+        **kwargs,
+    ) -> None:
+        pass
+
+    @rank_zero_only
     def log_image(
         self,
         key: str,

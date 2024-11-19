@@ -71,6 +71,7 @@ class DatasetRE10k(IterableDataset):
         for root in cfg.roots:
             root = root / self.data_stage
             root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch"])
+            print(f"Found {len(root_chunks)} chunks in {root}.")
             self.chunks.extend(root_chunks)
         if self.cfg.overfit_to_scene is not None:
             chunk_path = self.index[self.cfg.overfit_to_scene]
@@ -196,7 +197,10 @@ class DatasetRE10k(IterableDataset):
     def convert_poses(
         self,
         poses: Float[Tensor, "batch 18"],
-    ) -> tuple[Float[Tensor, "batch 4 4"], Float[Tensor, "batch 3 3"],]:  # extrinsics  # intrinsics
+    ) -> tuple[
+        Float[Tensor, "batch 4 4"],
+        Float[Tensor, "batch 3 3"],
+    ]:  # extrinsics  # intrinsics
         b, _ = poses.shape
 
         # Convert the intrinsics to a 3x3 normalized K matrix.

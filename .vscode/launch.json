@@ -11,6 +11,22 @@
             "module": "src.main",
             "console": "integratedTerminal",
             "args": ["+experiment=re10k", "mode=train", "checkpointing.resume=False", "wandb.mode=disabled"],
+        },
+        {
+            "name": "Debug p3d_visualize_scene.py",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.geometry.p3d_visualize_scene",
+            "console": "integratedTerminal",
+            "args": [],
+        },
+        {
+            "name": "Debug o3d_visualize_scene.py",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.geometry.o3d_visualize_scene",
+            "console": "integratedTerminal",
+            "args": [],
         }
     ]
 }

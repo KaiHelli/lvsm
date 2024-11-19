@@ -4,6 +4,7 @@ import torch
 from einops import einsum, rearrange, reduce, repeat
 from jaxtyping import Bool, Float, Int64
 from torch import Tensor
+from typing import Literal
 
 
 def homogenize_points(
@@ -71,7 +72,7 @@ def project(
     return project_camera_space(points, intrinsics, epsilon=epsilon), in_front_of_camera
 
 
-def unproject(
+def unproject_directions(
     coordinates: Float[Tensor, "*#batch dim"],
     z: Float[Tensor, "*#batch"],
     intrinsics: Float[Tensor, "*#batch dim+1 dim+1"],
@@ -80,23 +81,66 @@ def unproject(
 
     # Apply the inverse intrinsics to the coordinates.
     coordinates = homogenize_points(coordinates)
+
     ray_directions = einsum(intrinsics.inverse(), coordinates, "... i j, ... j -> ... i")
 
     # Apply the supplied depth values.
     return ray_directions * z[..., None]
 
 
-def get_world_rays(
+def unproject_points(
+    coordinates: Float[Tensor, "*#batch dim"],
+    z: Float[Tensor, "*#batch"],
+    intrinsics: Float[Tensor, "*#batch dim+1 dim+1"],
+) -> Float[Tensor, "*batch dim+1"]:
+    """Unproject 2D camera coordinates with the given Z values."""
+
+    # Apply the inverse intrinsics to the coordinates.
+    coordinates = homogenize_points(coordinates) * z[..., None]
+
+    ray_directions = einsum(intrinsics.inverse(), coordinates, "... i j, ... j -> ... i")
+
+    # Apply the supplied depth values.
+    return ray_directions
+
+
+def get_world_points(
     coordinates: Float[Tensor, "*#batch dim"],
     extrinsics: Float[Tensor, "*#batch dim+2 dim+2"],
     intrinsics: Float[Tensor, "*#batch dim+1 dim+1"],
-) -> tuple[Float[Tensor, "*batch dim+1"], Float[Tensor, "*batch dim+1"],]:  # origins  # directions
-    # Get camera-space ray directions.
-    directions = unproject(
+) -> Float[Tensor, "*batch dim+1"]:
+    # Get camera-space ray points.
+    directions = unproject_points(
         coordinates,
         torch.ones_like(coordinates[..., 0]),
         intrinsics,
     )
+
+    # Transform ray directions to world coordinates.
+    directions = homogenize_vectors(directions)
+    directions = transform_cam2world(directions, extrinsics)[..., :-1]
+
+    # Tile the ray origins to have the same shape as the ray directions.
+    origins = extrinsics[..., :-1, -1].broadcast_to(directions.shape)
+
+    return origins + directions
+
+
+def get_world_rays(
+    coordinates: Float[Tensor, "*#batch dim"],
+    extrinsics: Float[Tensor, "*#batch dim+2 dim+2"],
+    intrinsics: Float[Tensor, "*#batch dim+1 dim+1"],
+) -> tuple[
+    Float[Tensor, "*batch dim+1"],
+    Float[Tensor, "*batch dim+1"],
+]:  # origins  # directions
+    # Get camera-space ray directions.
+    directions = unproject_directions(
+        coordinates,
+        torch.ones_like(coordinates[..., 0]),
+        intrinsics,
+    )
+
     directions = directions / directions.norm(dim=-1, keepdim=True)
 
     # Transform ray directions to world coordinates.
@@ -173,92 +217,46 @@ def plucker_to_point_direction(
     return torch.cat((points, direction), dim=-1)
 
 
-# TODO: Currently implemented incorrectly
-def plot_plucker_rays(image, plucker_rays, step=16):
-    """
-    Plots Plücker rays on top of the given image.
-
-    Args:
-        image: A tensor representing the image, shape: (b, n, c, h, w)
-        plucker_rays: A tensor representing Plücker rays, shape: (b, n, 6, h, w)
-        step: Step size to reduce the density of rays for better visualization.
-    """
-    pass
-    """
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from einops import rearrange
-    import uuid
-
-    # Convert torch tensor image to numpy for visualization
-    image_np = image.cpu().numpy()[0, 0]  # Assuming batch size is 1 for visualization
-    image_np = np.transpose(image_np, (1, 2, 0))  # (h, w, c)
-
-    # Create a figure and axis object
-    fig, ax = plt.subplots()
-    ax.imshow(image_np)
-    ax.axis('off')
-
-    # Extract origin (M) and direction (L) from Plücker rays
-    L = plucker_rays[0, 0, :3]  # (3, h, w)
-    M = plucker_rays[0, 0, 3:]  # (3, h, w)
-
-    # Get image dimensions
-    img_height, img_width, _ = image_np.shape
-
-    # Use step to reduce the number of rays for better visualization
-    h, w = L.shape[1], L.shape[2]
-    for i in range(0, h, step):
-        for j in range(0, w, step):
-            # The origin is the pixel position (i + 0.5, j + 0.5) scaled to the image dimensions to get the center of the pixel
-            origin_x = (j + 0.5) / w * img_width
-            origin_y = (i + 0.5) / h * img_height
-
-            # Extract direction at the given (i, j) position
-            direction = L[:, i, j]
-
-            # Convert direction to pixel scale for visualization
-            direction_x = direction[0].cpu().numpy() * img_width
-            direction_y = direction[1].cpu().numpy() * img_height
-
-            # Define start and end points for the ray (scale down direction for better visualization)
-            start = (origin_x, origin_y)
-            end = (origin_x + direction_x * 0.05, origin_y + direction_y * 0.05)  # Scale down the direction
-
-            # Plotting a line for each ray
-            ax.plot([start[0], end[0]], [start[1], end[1]], color='r', alpha=0.6)
-
-    # Generate a random ID for the filename
-    random_id = str(uuid.uuid4())
-    filename = f"plucker_rays_{random_id}.png"
-    
-    # Save the plot with the generated filename
-    fig.savefig(filename, bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
-    
-    print(f"Plot saved as {filename}")
-    """
-
-
 def sample_image_grid(
     shape: tuple[int, ...],
     device: torch.device = torch.device("cpu"),
+    sampling_type: Literal["center", "corner"] = "center",
 ) -> tuple[
     Float[Tensor, "*shape dim"],  # float coordinates (xy indexing)
     Int64[Tensor, "*shape dim"],  # integer indices (ij indexing)
 ]:
-    """Get normalized (range 0 to 1) coordinates and integer indices for an image."""
+    """Get normalized (range 0 to 1) coordinates and integer indices for an image.
 
-    # Each entry is a pixel-wise integer coordinate. In the 2D case, each entry is a
-    # (row, col) coordinate.
-    indices = [torch.arange(length, device=device) for length in shape]
+    Args:
+        shape (tuple[int, ...]): Shape of the image grid (height, width, ...).
+        device (torch.device): The device where the tensors should be created.
+        sampling_type (Literal["center", "corner"]): Specifies whether to sample the center or the corners of pixels.
+            - "center": Samples the center of each pixel. Coordinates range from 0.25 to 0.75 for a 2x2 image.
+            - "corner": Samples the corners of each pixel. Coordinates range from 0.0 to 1.0 for a 2x2 image.
+
+    Returns:
+        tuple[Tensor, Tensor]:
+            - Normalized float coordinates (xy indexing), shape (*shape, dim).
+            - Integer indices (ij indexing), shape (*shape, dim).
+    """
+    assert sampling_type in {"center", "corner"}, "sampling_type must be either 'center' or 'corner'"
+
+    # Set up offset and adjusted shape based on sampling type
+    # If sampling_type is "center", offset is 0.5 to sample the middle of each pixel.
+    # If sampling_type is "corner", offset is 0.0 to sample the edges of each pixel.
+    # divisor_adjustment is 1 for "corner" to include the extra edges, and 0 for "center".
+    offset, divisor_adjustment = (0.5, 0) if sampling_type == "center" else (0.0, 1)
+    adjusted_shape = [length + divisor_adjustment for length in shape]
+
+    # Create integer indices and floating-point coordinates
+    indices = [torch.arange(length, device=device) for length in adjusted_shape]
     stacked_indices = torch.stack(torch.meshgrid(*indices, indexing="ij"), dim=-1)
 
-    # Each entry is a floating-point coordinate in the range (0, 1). In the 2D case,
-    # each entry is an (x, y) coordinate.
-    coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]
-    coordinates = reversed(coordinates)
-    coordinates = torch.stack(torch.meshgrid(*coordinates, indexing="xy"), dim=-1)
+    # Calculate normalized coordinates
+    # For "center", offset ensures we are in the middle of each pixel. For "corner", we are at the edges.
+    # Normalization divides by (length - divisor_adjustment) to ensure coordinates range from 0 to 1.
+    coordinates = [(idx + offset) / (length - divisor_adjustment) for idx, length in zip(indices, adjusted_shape)]
+    coordinates = torch.stack(torch.meshgrid(*reversed(coordinates), indexing="xy"), dim=-1)
 
     return coordinates, stacked_indices
 
