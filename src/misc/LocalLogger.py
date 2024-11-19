@@ -32,6 +32,10 @@ class LocalLogger(Logger):
         pass
 
     @rank_zero_only
+    def log_video(self, key, videos, step=None, **kwargs):
+        pass
+
+    @rank_zero_only
     def log_table(
         self,
         key: str,

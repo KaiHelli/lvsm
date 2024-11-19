@@ -313,12 +313,19 @@ class ModelWrapper(LightningModule):
         intrinsics = torch.stack((*batch["context"]["intrinsics"][0], *batch["target"]["intrinsics"][0]), dim=0)
         extrinsics = torch.stack((*batch["context"]["extrinsics"][0], *batch["target"]["extrinsics"][0]), dim=0)
         with torch.amp.autocast("cuda" if images.is_cuda else "cpu", enabled=False):
-            fig = visualize_scene(images, extrinsics, intrinsics)
+            fig = visualize_scene(images, extrinsics, intrinsics, generate_gif=False)
 
         html_str = pio.to_html(fig, auto_play=False)
         html = wandb.Html(html_str)
-
         self.logger.log_table("scene", columns=["scene_html"], data=[[html]], step=self.global_step)
+
+        # Rendering gif takes up too much time in validation
+        # self.logger.log_video(
+        #    "scene_rendered",
+        #    [gif_bytes],
+        #    step=self.global_step,
+        #    caption=batch["scene"]
+        # )
 
         # TODO: Look at this.
         # Run video validation step.

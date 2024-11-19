@@ -1,14 +1,20 @@
+from jaxtyping import Float, Int
+from typing import List, Optional, Tuple
+
+import warnings
+import io
 import torch
 import numpy as np
 from einops import rearrange, repeat
+from PIL import Image
+from plotly.graph_objects import Figure
+from plotly.io import to_image
+
 from pytorch3d.renderer import PerspectiveCameras, RayBundle
 from pytorch3d.structures import Meshes
 from pytorch3d.renderer.mesh import TexturesAtlas
 from pytorch3d.vis.plotly_vis import AxisArgs, plot_scene
 from pytorch3d.utils import cameras_from_opencv_projection
-from plotly.graph_objects import Figure
-from jaxtyping import Float, Int
-from typing import List, Optional, Tuple
 
 from .projection import get_world_rays, sample_image_grid, get_world_points
 
@@ -144,21 +150,9 @@ def draw_images_on_planes(
     return mesh
 
 
-def compute_aabb(points):
-    """
-    Compute the axis-aligned bounding box for a set of points.
-    Args:
-        points: Tensor of shape (N, 3) representing 3D points.
-    Returns:
-        bbox_min: Tensor of shape (3,) representing the minimum x, y, z coordinates.
-        bbox_max: Tensor of shape (3,) representing the maximum x, y, z coordinates.
-    """
-    bbox_min = points.min(dim=0).values
-    bbox_max = points.max(dim=0).values
-    return bbox_min, bbox_max
-
-
-def compute_combined_aabb(cameras: PerspectiveCameras, ray_bundles: list, meshes: Meshes):
+def compute_combined_aabb(
+    cameras: PerspectiveCameras, ray_bundles: List[RayBundle], meshes: Meshes
+) -> Tuple[Float[torch.Tensor, "3"], Float[torch.Tensor, "3"]]:
     """
     Compute the axis-aligned bounding box that includes camera origins, rays, and mesh vertices.
     Args:
@@ -171,27 +165,93 @@ def compute_combined_aabb(cameras: PerspectiveCameras, ray_bundles: list, meshes
     """
     # Get camera origins
     camera_origins = cameras.get_camera_center()
-    
+
     # Get all ray points from all RayBundles (includes ray origins and directions)
     all_ray_points = []
     for ray_bundle in ray_bundles:
-        ray_points = ray_bundle.origins[:, None, :] + rearrange(ray_bundle.lengths, 'n l -> n l 1') * ray_bundle.directions[:, None, :]
+        ray_points = (
+            ray_bundle.origins[:, None, :]
+            + rearrange(ray_bundle.lengths, "n l -> n l 1") * ray_bundle.directions[:, None, :]
+        )
         ray_points = rearrange(ray_points, "n l p -> (n l) p")
 
         all_ray_points.append(ray_points)
-    
+
     all_ray_points = torch.cat(all_ray_points, dim=0)
-    
+
     # Get all mesh vertices
     mesh_verts = meshes.verts_packed()
-    
+
     # Combine all points (camera origins, ray points, mesh vertices)
     all_points = torch.cat([camera_origins, all_ray_points, mesh_verts], dim=0)
-    
+
     # Compute the combined AABB
-    bbox_min, bbox_max = compute_aabb(all_points)
-    
+    bbox_min = all_points.min(dim=0).values
+    bbox_max = all_points.max(dim=0).values
+
     return bbox_min, bbox_max
+
+
+def generate_rotation_gif(
+    fig: Figure, aabb_min: Float[torch.Tensor, "3"], aabb_max: Float[torch.Tensor, "3"], num_frames: int = 36
+) -> io.BytesIO:
+    """
+    Generates a rotating GIF for a 3D Plotly figure around a given AABB.
+
+    Parameters:
+        fig (Figure): A Plotly 3D figure.
+        aabb_min (torch.Tensor): The minimum point of the AABB (shape [3]).
+        aabb_max (torch.Tensor): The maximum point of the AABB (shape [3]).
+        num_frames (int): Number of frames for the rotation.
+
+    Returns:
+        Image: A pillow image.
+    """
+    warnings.warn("Check the rotation implementation before using this function to create gifs from Plotly figures.")
+
+    # Calculate the center and radius of the bounding box
+    center = (aabb_min + aabb_max) / 2  # Center of the AABB
+    radius = 0.75 * torch.norm(aabb_max - center)  # Radius for the camera
+
+    # Generate rotation angles
+    angles = torch.linspace(0, 2 * torch.pi, num_frames + 1)[:-1]
+
+    # Store frames in memory
+    frames = []
+    for angle in angles:
+        # Calculate camera position
+        x = center[0] + radius * torch.cos(angle)
+        y = center[1] + radius * 0.5
+        z = center[2] + radius * torch.sin(angle)
+
+        # Update camera
+        fig.update_layout(
+            scene_camera=dict(
+                up=dict(x=0, y=1, z=0),
+                center=dict(x=center[0].item(), y=center[1].item(), z=center[2].item()),
+                eye=dict(x=x.item(), y=y.item(), z=z.item()),
+            )
+        )
+
+        # Save frame to a BytesIO object
+        img_bytes = io.BytesIO()
+        fig.write_image(img_bytes, format="png", width=800, height=800)
+        img_bytes.seek(0)  # Reset pointer for reading
+        frames.append(Image.open(img_bytes))
+
+    # Create GIF in memory
+    gif_bytes = io.BytesIO()
+    frames[0].save(
+        gif_bytes,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=500,  # Duration between frames in ms
+        loop=0,  # Loop indefinitely
+    )
+    gif_bytes.seek(0)  # Reset pointer for reading
+
+    return gif_bytes
 
 
 def visualize_scene(
@@ -199,7 +259,8 @@ def visualize_scene(
     extrinsics: Float[torch.Tensor, "n 4 4"],
     intrinsics: Float[torch.Tensor, "n 3 3"],
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-) -> Figure:
+    generate_gif: bool = False,
+) -> Figure | Tuple[Figure, io.BytesIO]:
     """
     Visualize the entire scene, including cameras, rays, and images, using PyTorch3D.
 
@@ -261,8 +322,8 @@ def visualize_scene(
     margin = 1
     bbox_min, bbox_max = compute_combined_aabb(cameras, rays, images_mesh)
 
-    bbox_min -= margin
-    bbox_max += margin
+    bbox_min_margin = bbox_min - margin
+    bbox_max_margin = bbox_max + margin
 
     # Calculate axis ranges
     range_xyz = bbox_max - bbox_min
@@ -271,20 +332,21 @@ def visualize_scene(
 
     # Calculate the aspect ratio
     aspect_ratio = dict(
-        x=(range_xyz[0] / max_range).item(),
-        y=(range_xyz[1] / max_range).item(),
-        z=(range_xyz[2] / max_range).item()
+        x=(range_xyz[0] / max_range).item(), y=(range_xyz[1] / max_range).item(), z=(range_xyz[2] / max_range).item()
     )
 
     # Set the aspect ratio to have an undistorted view on the scene
     fig["layout"]["scene"]["aspectmode"] = "manual"
 
-    fig["layout"]["scene"]["xaxis"]["range"] = [bbox_min[0].item(), bbox_max[0].item()]
-    fig["layout"]["scene"]["yaxis"]["range"] = [bbox_min[1].item(), bbox_max[1].item()]
-    fig["layout"]["scene"]["zaxis"]["range"] = [bbox_min[2].item(), bbox_max[2].item()]
-
+    fig["layout"]["scene"]["xaxis"]["range"] = [bbox_min_margin[0].item(), bbox_max_margin[0].item()]
+    fig["layout"]["scene"]["yaxis"]["range"] = [bbox_min_margin[1].item(), bbox_max_margin[1].item()]
+    fig["layout"]["scene"]["zaxis"]["range"] = [bbox_min_margin[2].item(), bbox_max_margin[2].item()]
 
     fig["layout"]["scene"]["aspectratio"] = aspect_ratio
+
+    if generate_gif:
+        gif_bytes = generate_rotation_gif(fig, bbox_min, bbox_max, 16)
+        return fig, gif_bytes
 
     return fig
 

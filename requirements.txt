@@ -21,6 +21,8 @@ tabulate>=0.9.0
 opencv-python>=4.10.0.84
 sk-video>=1.1.10
 pytest>=8.3.3
+plotly>=5.24.1
+kaleido<0.4
 
 # Excluded as those are currently not used in the codebase
 #torchaudio>=2.5.1
