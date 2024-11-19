@@ -168,7 +168,7 @@ def visualize_scene(
     origins, directions = get_world_rays(rearrange(coordinates, "... d -> ... () d"), extrinsics, intrinsics)
 
     # Subsample the rays for visualization
-    keep_every_x, keep_every_y = max(grid_shape[1] // 32, 1), max(grid_shape[0] // 32, 1)
+    keep_every_x, keep_every_y = max(grid_shape[1] // 16, 1), max(grid_shape[0] // 16, 1)
     origins = origins[::keep_every_y, ::keep_every_x]
     directions = directions[::keep_every_y, ::keep_every_x]
 

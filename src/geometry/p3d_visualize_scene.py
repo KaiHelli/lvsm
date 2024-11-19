@@ -68,7 +68,7 @@ def draw_rays(
     origins, directions = get_world_rays(rearrange(coordinates, "... d -> ... () d"), extrinsics, intrinsics)
 
     # Subsample the rays for visualization
-    keep_every_x, keep_every_y = max(image_size[1] // 32, 1), max(image_size[0] // 32, 1)
+    keep_every_x, keep_every_y = max(image_size[1] // 16, 1), max(image_size[0] // 16, 1)
     origins = origins[::keep_every_y, ::keep_every_x]
     directions = directions[::keep_every_y, ::keep_every_x]
 
@@ -144,6 +144,56 @@ def draw_images_on_planes(
     return mesh
 
 
+def compute_aabb(points):
+    """
+    Compute the axis-aligned bounding box for a set of points.
+    Args:
+        points: Tensor of shape (N, 3) representing 3D points.
+    Returns:
+        bbox_min: Tensor of shape (3,) representing the minimum x, y, z coordinates.
+        bbox_max: Tensor of shape (3,) representing the maximum x, y, z coordinates.
+    """
+    bbox_min = points.min(dim=0).values
+    bbox_max = points.max(dim=0).values
+    return bbox_min, bbox_max
+
+
+def compute_combined_aabb(cameras: PerspectiveCameras, ray_bundles: list, meshes: Meshes):
+    """
+    Compute the axis-aligned bounding box that includes camera origins, rays, and mesh vertices.
+    Args:
+        cameras: A PerspectiveCameras object.
+        ray_bundles: A list of RayBundle objects containing rays.
+        meshes: A Meshes object containing 3D meshes.
+    Returns:
+        bbox_min: Tensor of shape (3,) representing the minimum x, y, z coordinates.
+        bbox_max: Tensor of shape (3,) representing the maximum x, y, z coordinates.
+    """
+    # Get camera origins
+    camera_origins = cameras.get_camera_center()
+    
+    # Get all ray points from all RayBundles (includes ray origins and directions)
+    all_ray_points = []
+    for ray_bundle in ray_bundles:
+        ray_points = ray_bundle.origins[:, None, :] + rearrange(ray_bundle.lengths, 'n l -> n l 1') * ray_bundle.directions[:, None, :]
+        ray_points = rearrange(ray_points, "n l p -> (n l) p")
+
+        all_ray_points.append(ray_points)
+    
+    all_ray_points = torch.cat(all_ray_points, dim=0)
+    
+    # Get all mesh vertices
+    mesh_verts = meshes.verts_packed()
+    
+    # Combine all points (camera origins, ray points, mesh vertices)
+    all_points = torch.cat([camera_origins, all_ray_points, mesh_verts], dim=0)
+    
+    # Compute the combined AABB
+    bbox_min, bbox_max = compute_aabb(all_points)
+    
+    return bbox_min, bbox_max
+
+
 def visualize_scene(
     images: Float[torch.Tensor, "n c h w"],
     extrinsics: Float[torch.Tensor, "n 4 4"],
@@ -207,14 +257,34 @@ def visualize_scene(
 
     fig.update_legends({"groupclick": "toggleitem"})
 
-    # fig['layout']['scene']['aspectmode'] = "data"
+    # Calculate the ranges to display the scene in plotly
+    margin = 1
+    bbox_min, bbox_max = compute_combined_aabb(cameras, rays, images_mesh)
 
+    bbox_min -= margin
+    bbox_max += margin
+
+    # Calculate axis ranges
+    range_xyz = bbox_max - bbox_min
+    # Find the maximum range to make sure all squares are the same length
+    max_range = range_xyz.max()
+
+    # Calculate the aspect ratio
+    aspect_ratio = dict(
+        x=(range_xyz[0] / max_range).item(),
+        y=(range_xyz[1] / max_range).item(),
+        z=(range_xyz[2] / max_range).item()
+    )
+
+    # Set the aspect ratio to have an undistorted view on the scene
     fig["layout"]["scene"]["aspectmode"] = "manual"
-    fig["layout"]["scene"]["aspectratio"] = dict(x=1, y=1, z=1)
 
-    fig["layout"]["scene"]["xaxis"]["range"] = [-2, 2]
-    fig["layout"]["scene"]["yaxis"]["range"] = [-2, 2]
-    fig["layout"]["scene"]["zaxis"]["range"] = [-2, 2]
+    fig["layout"]["scene"]["xaxis"]["range"] = [bbox_min[0].item(), bbox_max[0].item()]
+    fig["layout"]["scene"]["yaxis"]["range"] = [bbox_min[1].item(), bbox_max[1].item()]
+    fig["layout"]["scene"]["zaxis"]["range"] = [bbox_min[2].item(), bbox_max[2].item()]
+
+
+    fig["layout"]["scene"]["aspectratio"] = aspect_ratio
 
     return fig
 
