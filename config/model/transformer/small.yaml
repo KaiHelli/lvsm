@@ -9,3 +9,5 @@ num_decoder_layers: 0
 bias: true
 activation: gelu
 pre_norm: true
+qk_norm: true
+qk_exp_seq_len: "${calc_exp_seq_len:${dataset.image_shape},${model.lvsm.patch_size},${dataset.view_sampler.num_context_views},${dataset.view_sampler.num_target_views}}"

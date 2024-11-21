@@ -145,7 +145,10 @@ def device(request):
 
 
 @pytest.mark.parametrize("pre_norm", [True, False])
-def test_transformer_equivalence(device, torch_version, pre_norm):
+@pytest.mark.parametrize(
+    "precision", [torch.float16, torch.float32]
+)  # rounding errors of bfloat16 seem to be to high for good comparison of outputs
+def test_transformer_equivalence(device, torch_version, pre_norm, precision):
     with patch(
         "torch.__version__",
         new=torch_version if torch_version is not None else torch.__version__,
@@ -164,17 +167,18 @@ def test_transformer_equivalence(device, torch_version, pre_norm):
         src = torch.rand((n_batch, n_seq_src, d_model)).to(device)  # (sequence length, batch size, d_model)
         tgt = torch.rand((n_batch, n_seq_tgt, d_model)).to(device)
 
-        reference_output = reference_model(
-            src,
-            tgt,
-            tgt_mask=nn.Transformer.generate_square_subsequent_mask(n_seq_tgt, device=device),
-            tgt_is_causal=True,
-        )
-        our_output = our_model(src, tgt)
+        with torch.amp.autocast(device_type=device, dtype=precision):
+            reference_output = reference_model(
+                src,
+                tgt,
+                tgt_mask=nn.Transformer.generate_square_subsequent_mask(n_seq_tgt, device=device),
+                tgt_is_causal=True,
+            )
+            our_output = our_model(src, tgt)
 
         # Ensure the outputs are close enough
         assert torch.allclose(
-            reference_output, our_output, atol=1e-5
+            reference_output, our_output, atol=1e-2 if precision == torch.float16 else 1e-5
         ), "The outputs of the reference and our implementation do not match!"
 
 

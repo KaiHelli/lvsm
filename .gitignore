@@ -171,6 +171,7 @@ cython_debug/
 .bashrc
 /launcher_venv
 /slurm_logs
+/playground
 *.torch
 *.ckpt
 table.tex

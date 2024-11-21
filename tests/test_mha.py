@@ -4,18 +4,7 @@ import sys
 import os
 from unittest.mock import patch
 from packaging.version import parse as parse_version
-
 from model.transformer.multi_head_attention import MultiHeadAttention
-
-try:
-    from flash_attn.flash_attn_interface import (
-        flash_attn_varlen_qkvpacked_func,
-        flash_attn_varlen_kvpacked_func,
-    )
-
-    HAVE_FLASH_ATTN = True
-except (ModuleNotFoundError, ImportError):
-    HAVE_FLASH_ATTN = False
 
 
 # Parametrize the device fixture to explicitly run on both 'cuda' and 'cpu'
@@ -26,9 +15,12 @@ def device(request):
     return request.param
 
 
-@pytest.fixture
-def dtype(device):
-    return torch.float16 if device == "cuda" else torch.float32
+# Parametrize the precision for testing: float32 and float16
+@pytest.fixture(
+    params=[torch.float16, torch.float32]
+)  # rounding errors of bfloat16 seem to be to high for good comparison of outputs
+def precision(request):
+    return request.param
 
 
 # Parametrize the PyTorch version for testing
@@ -39,12 +31,17 @@ def torch_version(request):
 
 @pytest.mark.parametrize("cross_attention", [True, False])
 @pytest.mark.parametrize("causal", [True, False])
-def test_attention(device, dtype, cross_attention, torch_version, causal):
-    with patch(
-        "torch.__version__",
-        new=torch_version if torch_version is not None else torch.__version__,
+def test_attention(device, precision, cross_attention, torch_version, causal):
+    with (
+        patch(
+            "torch.__version__",
+            new=torch_version if torch_version is not None else torch.__version__,
+        ),
+        torch.amp.autocast(device_type=device, dtype=precision),
     ):
-        print(f"Testing attention on {device = }, {cross_attention = }, {torch_version = }, {causal = }.")
+        print(
+            f"Testing attention on {device = }, {precision = }, {cross_attention = }, {torch_version = }, {causal = }."
+        )
         n_batch = 7
         nhead = 4
         n_seq_q = 534
@@ -52,12 +49,9 @@ def test_attention(device, dtype, cross_attention, torch_version, causal):
         embed_dim = 128
 
         # Prepare input tensors
-        x = torch.normal(torch.tensor(0.0), torch.tensor(1.0), size=(n_batch, n_seq_q, embed_dim)).to(device, dtype)
-
-        x_q = torch.normal(torch.tensor(0.0), torch.tensor(1.0), size=(n_batch, n_seq_q, embed_dim)).to(device, dtype)
-        x_kv = torch.normal(torch.tensor(0.0), torch.tensor(1.0), size=(n_batch, n_seq_kv, embed_dim)).to(device, dtype)
-
-        use_flash_attention = HAVE_FLASH_ATTN and torch.cuda.is_available()
+        x = torch.normal(torch.tensor(0.0), torch.tensor(1.0), size=(n_batch, n_seq_q, embed_dim)).to(device)
+        x_q = torch.normal(torch.tensor(0.0), torch.tensor(1.0), size=(n_batch, n_seq_q, embed_dim)).to(device)
+        x_kv = torch.normal(torch.tensor(0.0), torch.tensor(1.0), size=(n_batch, n_seq_kv, embed_dim)).to(device)
 
         # Create attention mask
         if cross_attention:
@@ -67,11 +61,7 @@ def test_attention(device, dtype, cross_attention, torch_version, causal):
             attn_mask = torch.randint(0, 2, (n_seq_q, n_seq_q), dtype=torch.bool, device=device)
             causal_mask = torch.tril(torch.ones((n_seq_q, n_seq_q), dtype=torch.bool, device=device))
 
-        # flash attention is not compatible with attention mask as of now
-        if use_flash_attention or causal:
-            attn_mask = None
-
-        att_ref = torch.nn.MultiheadAttention(embed_dim, nhead, batch_first=True, bias=True, device=device, dtype=dtype)
+        att_ref = torch.nn.MultiheadAttention(embed_dim, nhead, batch_first=True, bias=True, device=device)
         att_test = MultiHeadAttention(
             d_model=embed_dim,
             d_k=embed_dim // nhead,
@@ -115,6 +105,9 @@ def test_attention(device, dtype, cross_attention, torch_version, causal):
             att_test.o_proj.weight.data = att_ref.out_proj.weight.data
             att_test.o_proj.bias.data = att_ref.out_proj.bias.data
 
+        att_ref = att_ref.to(device)
+        att_test = att_test.to(device)
+
         # Perform the test comparison
         if cross_attention:
             y, _ = att_ref(
@@ -124,7 +117,7 @@ def test_attention(device, dtype, cross_attention, torch_version, causal):
                 attn_mask=(~causal_mask if causal else ~attn_mask if attn_mask is not None else None),
                 is_causal=causal,
             )
-            y_ = att_test(x_q, x_kv, attn_mask=attn_mask, causal=causal)
+            y_ = att_test(x_q, x_kv, attn_mask=None if causal else attn_mask, causal=causal)
         else:
             y, _ = att_ref(
                 x,
@@ -133,30 +126,30 @@ def test_attention(device, dtype, cross_attention, torch_version, causal):
                 attn_mask=(~causal_mask if causal else ~attn_mask if attn_mask is not None else None),
                 is_causal=causal,
             )
-            y_ = att_test(x, attn_mask=attn_mask, causal=causal)
+            y_ = att_test(x, attn_mask=None if causal else attn_mask, causal=causal)
 
         assert torch.sqrt(torch.nn.functional.mse_loss(y, y_)) < 5e-5
 
         # Test add_input functionality
         if cross_attention:
             x_q_ = x_q.clone()
-            y__ = att_test(x_q_, x_kv, attn_mask=attn_mask, causal=causal) + x_q
+            y__ = att_test(x_q_, x_kv, attn_mask=None if causal else attn_mask, causal=causal) + x_q
             assert torch.sqrt(torch.nn.functional.mse_loss(y + x_q, y__)) < 5e-5
         else:
             x_ = x.clone()
-            y__ = att_test(x_, attn_mask=attn_mask, causal=causal) + x
+            y__ = att_test(x_, attn_mask=None if causal else attn_mask, causal=causal) + x
             assert torch.sqrt(torch.nn.functional.mse_loss(y + x, y__)) < 5e-5
 
         # Test with no gradient update
         if cross_attention:
             x_q_ = x_q.clone()
             with torch.no_grad():
-                y__ = att_test(x_q_, x_kv, attn_mask=attn_mask, causal=causal) + x_q
+                y__ = att_test(x_q_, x_kv, attn_mask=None if causal else attn_mask, causal=causal) + x_q
             assert torch.sqrt(torch.nn.functional.mse_loss(y + x_q, y__)) < 5e-5
         else:
             x_ = x.clone()
             with torch.no_grad():
-                y__ = att_test(x_, attn_mask=attn_mask, causal=causal) + x
+                y__ = att_test(x_, attn_mask=None if causal else attn_mask, causal=causal) + x
             assert torch.sqrt(torch.nn.functional.mse_loss(y + x, y__)) < 5e-5
 
 
