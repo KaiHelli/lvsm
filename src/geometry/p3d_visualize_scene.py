@@ -171,26 +171,29 @@ def compute_combined_aabb(cameras: PerspectiveCameras, ray_bundles: list, meshes
     """
     # Get camera origins
     camera_origins = cameras.get_camera_center()
-    
+
     # Get all ray points from all RayBundles (includes ray origins and directions)
     all_ray_points = []
     for ray_bundle in ray_bundles:
-        ray_points = ray_bundle.origins[:, None, :] + rearrange(ray_bundle.lengths, 'n l -> n l 1') * ray_bundle.directions[:, None, :]
+        ray_points = (
+            ray_bundle.origins[:, None, :]
+            + rearrange(ray_bundle.lengths, "n l -> n l 1") * ray_bundle.directions[:, None, :]
+        )
         ray_points = rearrange(ray_points, "n l p -> (n l) p")
 
         all_ray_points.append(ray_points)
-    
+
     all_ray_points = torch.cat(all_ray_points, dim=0)
-    
+
     # Get all mesh vertices
     mesh_verts = meshes.verts_packed()
-    
+
     # Combine all points (camera origins, ray points, mesh vertices)
     all_points = torch.cat([camera_origins, all_ray_points, mesh_verts], dim=0)
-    
+
     # Compute the combined AABB
     bbox_min, bbox_max = compute_aabb(all_points)
-    
+
     return bbox_min, bbox_max
 
 
@@ -271,9 +274,7 @@ def visualize_scene(
 
     # Calculate the aspect ratio
     aspect_ratio = dict(
-        x=(range_xyz[0] / max_range).item(),
-        y=(range_xyz[1] / max_range).item(),
-        z=(range_xyz[2] / max_range).item()
+        x=(range_xyz[0] / max_range).item(), y=(range_xyz[1] / max_range).item(), z=(range_xyz[2] / max_range).item()
     )
 
     # Set the aspect ratio to have an undistorted view on the scene
@@ -282,7 +283,6 @@ def visualize_scene(
     fig["layout"]["scene"]["xaxis"]["range"] = [bbox_min[0].item(), bbox_max[0].item()]
     fig["layout"]["scene"]["yaxis"]["range"] = [bbox_min[1].item(), bbox_max[1].item()]
     fig["layout"]["scene"]["zaxis"]["range"] = [bbox_min[2].item(), bbox_max[2].item()]
-
 
     fig["layout"]["scene"]["aspectratio"] = aspect_ratio
 

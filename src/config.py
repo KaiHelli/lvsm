@@ -84,6 +84,8 @@ def separate_loss_cfg_wrappers(joined: dict) -> list[LossCfgWrapper]:
 
 
 def load_typed_root_config(cfg: DictConfig) -> RootCfg:
+    # Resolve all interpolations before typing.
+    OmegaConf.resolve(cfg)
     return load_typed_config(
         cfg,
         RootCfg,

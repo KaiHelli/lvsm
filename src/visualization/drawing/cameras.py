@@ -121,10 +121,7 @@ def compute_aabb(
     intrinsics: Float[Tensor, "batch 3 3"],
     near: Optional[Scalar] = None,
     far: Optional[Scalar] = None,
-) -> tuple[
-    Float[Tensor, "3"],
-    Float[Tensor, "3"],
-]:  # minima of the scene  # maxima of the scene
+) -> tuple[Float[Tensor, "3"], Float[Tensor, "3"],]:  # minima of the scene  # maxima of the scene
     """Compute an axis-aligned bounding box for the camera frustums."""
 
     device = extrinsics.device
@@ -150,10 +147,7 @@ def compute_equal_aabb_with_margin(
     minima: Float[Tensor, "*#batch 3"],
     maxima: Float[Tensor, "*#batch 3"],
     margin: float = 0.1,
-) -> tuple[
-    Float[Tensor, "*batch 3"],
-    Float[Tensor, "*batch 3"],
-]:  # minima of the scene  # maxima of the scene
+) -> tuple[Float[Tensor, "*batch 3"], Float[Tensor, "*batch 3"],]:  # minima of the scene  # maxima of the scene
     midpoint = (maxima + minima) * 0.5
     span = (maxima - minima).max() * (1 + margin)
     scene_minima = midpoint - 0.5 * span

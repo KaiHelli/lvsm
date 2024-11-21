@@ -39,7 +39,7 @@ from ..visualization.layout import add_border, hcat, vcat
 from ..visualization import layout
 from ..geometry.p3d_visualize_scene import visualize_scene
 
-from .transformer.norm import LayerNorm
+from .transformer.norm import LayerNorm, QKScaleUp, QKNorm
 from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
 import plotly.io as pio
@@ -77,10 +77,7 @@ class TrajectoryFn(Protocol):
     def __call__(
         self,
         t: Float[Tensor, " t"],
-    ) -> tuple[
-        Float[Tensor, "batch view 4 4"],
-        Float[Tensor, "batch view 3 3"],
-    ]:  # extrinsics  # intrinsics
+    ) -> tuple[Float[Tensor, "batch view 4 4"], Float[Tensor, "batch view 3 3"],]:  # extrinsics  # intrinsics
         pass
 
 
@@ -492,15 +489,13 @@ class ModelWrapper(LightningModule):
         no_decay = set()
 
         whitelist_weight_modules = (nn.Linear,)
-        blacklist_weight_modules = (nn.LayerNorm, LayerNorm, nn.Embedding)
+        blacklist_weight_modules = (nn.LayerNorm, LayerNorm, QKNorm, QKScaleUp, nn.Embedding)
 
         for module_name, module in self.named_modules():
             for param_name, param in module.named_parameters():
                 full_param_name = f"{module_name}.{param_name}" if module_name else param_name
 
-                if param_name == "qk_norm_parameter":  # Se il nome del parametro è quello che cerchi
-                    no_decay.add(full_param_name)
-                elif param_name.endswith("bias"):
+                if param_name.endswith("bias"):
                     no_decay.add(full_param_name)
                 elif param_name == "weight" and isinstance(module, whitelist_weight_modules):
                     decay.add(full_param_name)

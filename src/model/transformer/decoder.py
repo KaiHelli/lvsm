@@ -5,15 +5,36 @@ from .activations import get_activation_fn, get_weight_init_fn
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, d_model, d_k, d_v, num_heads, d_ff, dropout_p, *, activation="relu", bias=True, pre_norm=False):
+    def __init__(
+        self,
+        d_model,
+        d_k,
+        d_v,
+        num_heads,
+        d_ff,
+        dropout_p,
+        *,
+        activation="relu",
+        bias=True,
+        pre_norm=False,
+        qk_norm=False,
+        qk_exp_seq_len=None,
+    ):
         """
         Decoder block for the Transformer model.
 
         Args:
             d_model: The model dimensionality.
+            d_k: The key and query dimensionality per head.
+            d_v: the value dimensionality per head.
             num_heads: The number of attention heads.
             d_ff: The feedforward dimensionality.
             dropout_p: The dropout probability.
+            activation: The activation to apply in the mlp.
+            bias: Whether to include bias in the linear layers.
+            pre_norm: Apply layer norm in pre- or post-layer fashion.
+            qk_norm: Whether to apply qk_norm in the attention layers.
+            qk_exp_seq_len: If qk_norm is true, this defines the expected sequence lengths to initialize the QK normalization scaling parameter g_0.
         """
         super().__init__()
         self.activation = activation
@@ -28,6 +49,8 @@ class DecoderBlock(nn.Module):
             dropout_p=dropout_p,
             cross_attn=False,
             bias=bias,
+            qk_norm=qk_norm,
+            qk_exp_seq_len=qk_exp_seq_len,
         )
 
         # Multi-head cross-attention (encoder-decoder attention)
@@ -39,6 +62,8 @@ class DecoderBlock(nn.Module):
             dropout_p=dropout_p,
             cross_attn=True,
             bias=bias,
+            qk_norm=qk_norm,
+            qk_exp_seq_len=qk_exp_seq_len,
         )
 
         # Feedforward layer

@@ -3,6 +3,7 @@ from .encoder import TransformerEncoder
 from .decoder import TransformerDecoder
 from src.dataset.types import DataShim
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -19,6 +20,7 @@ class TransformerCfg:
     activation: str
     pre_norm: bool
     qk_norm: bool
+    qk_exp_seq_len: Optional[int]
 
 
 class Transformer(torch.nn.Module):
@@ -36,7 +38,8 @@ class Transformer(torch.nn.Module):
             activation=cfg.activation,
             bias=cfg.bias,
             pre_norm=cfg.pre_norm,
-            qk_norm = cfg.qk_norm,
+            qk_norm=cfg.qk_norm,
+            qk_exp_seq_len=cfg.qk_exp_seq_len,
         )
 
     def __init__(
@@ -53,7 +56,8 @@ class Transformer(torch.nn.Module):
         activation="relu",
         bias=True,
         pre_norm=False,
-        qk_norm = False,
+        qk_norm=False,
+        qk_exp_seq_len=None,
     ):
         """
         Transformer model that can be used as encoder-decoder, encoder-only, or decoder-only.
@@ -67,9 +71,15 @@ class Transformer(torch.nn.Module):
             dropout_p: Dropout probability.
             num_encoder_layers: Number of encoder layers (0 if not using an encoder).
             num_decoder_layers: Number of decoder layers (0 if not using a decoder).
+            activation: The activation to apply in the mlps.
             bias: Whether to include bias in the attention layers.
+            norm: The normalization strategy to apply.
+            qk_norm: Whether to apply qk_norm in the attention layers.
+            qk_exp_seq_len: If qk_norm is true, this defines the expected sequence lengths to initialize the QK normalization scaling parameter g_0.
         """
         super().__init__()
+
+        assert num_encoder_layers + num_decoder_layers > 0, "At least one of encoder or decoder must be specified."
 
         # Encoder module if required
         if num_encoder_layers > 0:
@@ -84,7 +94,8 @@ class Transformer(torch.nn.Module):
                 bias=bias,
                 activation=activation,
                 pre_norm=pre_norm,
-                qk_norm= qk_norm,
+                qk_norm=qk_norm,
+                qk_exp_seq_len=qk_exp_seq_len,
             )
         else:
             self.encoder = None
@@ -102,6 +113,8 @@ class Transformer(torch.nn.Module):
                 bias=bias,
                 activation=activation,
                 pre_norm=pre_norm,
+                qk_norm=qk_norm,
+                qk_exp_seq_len=qk_exp_seq_len,
             )
         else:
             self.decoder = None
@@ -116,27 +129,27 @@ class Transformer(torch.nn.Module):
             src_mask: Mask for the source sequence (encoder).
             tgt_mask: Mask for the target sequence (decoder).
         """
-        if self.encoder is not None and src is not None:
+        if self.encoder is not None and self.decoder is not None:
+            assert src is not None and tgt is not None, "Transformer requires non-null input for src and tgt."
             enc_output = self.encoder(src, attn_mask=src_mask)
-        else:
-            enc_output = None
 
-        if self.decoder is not None and tgt is not None:
-            if enc_output is None:
-                raise ValueError("Decoder-only transformer requires non-null target input (tgt).")
             dec_output = self.decoder(
                 tgt, enc_output, causal=tgt_causal, self_attn_mask=tgt_sa_mask, cross_attn_mask=tgt_ca_mask
             )
-            return dec_output
 
-        if self.encoder is not None and self.decoder is None:
+            return dec_output
+        elif self.encoder is not None:
+            assert src is not None, "Transformer requires non-null input for src."
+
+            enc_output = self.encoder(src, attn_mask=src_mask)
+
             return enc_output
+        elif self.decoder is not None:
+            assert tgt is not None, "Transformer requires non-null input for tgt."
 
-        if self.decoder is not None and self.encoder is None:
             dec_output = self.decoder(tgt, None, causal=tgt_causal, self_attn_mask=tgt_sa_mask)
-            return dec_output
 
-        raise ValueError("At least one of encoder or decoder must be specified.")
+            return dec_output
 
     def get_data_shim(self) -> DataShim:
         """The default shim doesn't modify the batch."""
