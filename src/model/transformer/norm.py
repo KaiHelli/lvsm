@@ -54,7 +54,7 @@ class QKNorm(torch.nn.Module):
 
     def forward(self, q, k):
         q = torch.nn.functional.normalize(q, p=2, dim=-1)
-        k = torch.nn.functional.normalize(q, p=2, dim=-1)
+        k = torch.nn.functional.normalize(k, p=2, dim=-1)
 
         # In the paper we do: (g * (QK^T)) * V
         # We do ((gQ)*K^T)*V due to
