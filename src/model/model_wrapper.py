@@ -78,6 +78,7 @@ class TestCfg:
 class TrainCfg:
     extended_visualization: bool
     print_log_every_n_steps: int
+    log_train_output_img_every_n_batches: int
 
 
 @runtime_checkable
@@ -173,9 +174,23 @@ class ModelWrapper(LightningModule):
         total_loss = 0
         for loss_fn in self.losses:
             loss = loss_fn.forward(output, batch, self.global_step)
-            self.log(f"loss/{loss_fn.name}", loss)
+            self.log(f"loss/train/{loss_fn.name}", loss)
             total_loss = total_loss + loss
-        self.log("loss/total", total_loss)
+        self.log("loss/train/total", total_loss)
+
+        if self.global_rank == 0 and batch_idx % self.train_cfg.log_train_output_img_every_n_batches == 0:
+            # Construct comparison image.
+            comparison = hcat(
+                add_label(vcat(*batch["context"]["image"][0]), "Context"),
+                add_label(vcat(*batch["target"]["image"][0]), "Target (Ground Truth)"),
+                add_label(vcat(*output["color"][0]), "Target (Predicted)"),
+            )
+            self.logger.log_image(
+                "comparison/train",
+                [prep_image(add_border(comparison))],
+                step=self.global_step,
+                caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
+            )
 
         if self.global_rank == 0 and self.global_step % self.train_cfg.print_log_every_n_steps == 0:
             print(
@@ -328,6 +343,14 @@ class ModelWrapper(LightningModule):
         # Type the output.
         output = BatchedViewsRGBD({"color": output, "depth": None})
 
+        # Compute and log loss.
+        total_loss = 0
+        for loss_fn in self.losses:
+            loss = loss_fn.forward(output, batch, self.global_step)
+            self.log(f"loss/val/{loss_fn.name}", loss)
+            total_loss = total_loss + loss
+        self.log("loss/val/total", total_loss)
+
         rgb_out = output["color"][0]
 
         # Compute validation metrics.
@@ -347,10 +370,10 @@ class ModelWrapper(LightningModule):
             add_label(vcat(*rgb_out), "Target (Predicted)"),
         )
         self.logger.log_image(
-            "comparison",
+            "comparison/val",
             [prep_image(add_border(comparison))],
             step=self.global_step,
-            caption=batch["scene"],
+            caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
         )
 
         # Visualize scene.
@@ -362,7 +385,7 @@ class ModelWrapper(LightningModule):
 
         html_str = pio.to_html(fig, auto_play=False)
         html = wandb.Html(html_str)
-        self.logger.log_table("scene", columns=["scene_html"], data=[[html]], step=self.global_step)
+        self.logger.log_table("scene/val", columns=["scene_html"], data=[[html]], step=self.global_step)
 
         # Rendering gif takes up too much time in validation
         # self.logger.log_video(
