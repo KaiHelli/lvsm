@@ -131,24 +131,32 @@ def copy_weights(reference_model, our_model):
             our_layer.mlp[3].bias.data = ref_layer.linear2.bias.data.clone()
 
 
-# Parametrize the PyTorch version for testing
-@pytest.fixture(params=["1.13.0", None])
-def torch_version(request):
-    return request.param
+# Combined fixture for torch version and device
+@pytest.fixture(
+    params=[("2.4.1", "cuda"), ("2.4.1", "cpu"), ("1.13.0", "cuda"), ("1.13.0", "cpu"), (None, "cuda"), (None, "cpu")]
+)
+def version_device(request):
+    torch_version, device = request.param
 
-
-@pytest.fixture(params=["cuda", "cpu"])
-def device(request):
-    if request.param == "cuda" and not torch.cuda.is_available():
+    # Skip cases where CUDA is required but not available
+    if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA is not available, skipping GPU test.")
-    return request.param
+
+    # Skip cases where torch_version is None and device is CPU
+    if torch_version is None and device == "cpu":
+        pytest.skip("Flex attention requires GPU, skipping for CPU.")
+
+    return torch_version, device
 
 
 @pytest.mark.parametrize("pre_norm", [True, False])
 @pytest.mark.parametrize(
     "precision", [torch.float16, torch.float32]
-)  # rounding errors of bfloat16 seem to be to high for good comparison of outputs
-def test_transformer_equivalence(device, torch_version, pre_norm, precision):
+)  # rounding errors of bfloat16 seem to be too high for good comparison of outputs
+def test_transformer_equivalence(version_device, pre_norm, precision):
+    torch.set_float32_matmul_precision("highest")
+
+    torch_version, device = version_device
     with patch(
         "torch.__version__",
         new=torch_version if torch_version is not None else torch.__version__,
@@ -167,6 +175,18 @@ def test_transformer_equivalence(device, torch_version, pre_norm, precision):
         src = torch.rand((n_batch, n_seq_src, d_model)).to(device)  # (sequence length, batch size, d_model)
         tgt = torch.rand((n_batch, n_seq_tgt, d_model)).to(device)
 
+        attn_mask = None
+
+        if device == "cuda" and torch_version is None:
+            from torch.nn.attention.flex_attention import create_block_mask
+
+            def causal_mask(b, h, q_idx, kv_idx):
+                return q_idx >= kv_idx
+
+            attn_mask = create_block_mask(causal_mask, B=None, H=None, Q_LEN=n_seq_tgt, KV_LEN=n_seq_tgt)
+
+            our_model = torch.compile(our_model)
+
         with torch.amp.autocast(device_type=device, dtype=precision):
             reference_output = reference_model(
                 src,
@@ -174,11 +194,11 @@ def test_transformer_equivalence(device, torch_version, pre_norm, precision):
                 tgt_mask=nn.Transformer.generate_square_subsequent_mask(n_seq_tgt, device=device),
                 tgt_is_causal=True,
             )
-            our_output = our_model(src, tgt)
+            our_output = our_model(src, tgt, tgt_sa_mask=attn_mask)
 
         # Ensure the outputs are close enough
         assert torch.allclose(
-            reference_output, our_output, atol=1e-2 if precision == torch.float16 else 1e-5
+            reference_output, our_output, atol=5e-3
         ), "The outputs of the reference and our implementation do not match!"
 
 

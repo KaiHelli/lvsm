@@ -68,6 +68,7 @@ seed: 111123
 
 trainer:
   max_steps: -1
+  check_val_every_n_epoch: null
   val_check_interval: 250
   gradient_clip_val: 0.5 # try to use 5.0
   accumulate_grad_batches: 4

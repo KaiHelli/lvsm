@@ -13,8 +13,15 @@ import torch
 from einops import rearrange
 from packaging.version import parse as parse_version
 
+from src.misc.utils import model_on_gpu
+
 from .norm import QKNorm
 from .identity import Identity
+
+# torch._dynamo.config.cache_size_limit = 1000
+
+if parse_version(torch.__version__) >= parse_version("2.5.0"):
+    from torch.nn.attention.flex_attention import flex_attention, BlockMask, create_block_mask
 
 
 class MultiHeadAttention(torch.nn.Module):
@@ -98,6 +105,24 @@ class MultiHeadAttention(torch.nn.Module):
         if self.bias:
             self.o_proj.bias.data.fill_(0)
 
+    def _apply(self, *args, **kwargs):
+        module = super(MultiHeadAttention, self)._apply(*args, **kwargs)
+
+        # Only leave the efficient SDP enabled in case the model is put on a gpu.
+        # Otherwise allow everything.
+        if model_on_gpu(module):
+            torch.backends.cuda.enable_flash_sdp(False)
+            torch.backends.cuda.enable_math_sdp(False)
+            torch.backends.cuda.enable_cudnn_sdp(False)
+            torch.backends.cuda.enable_mem_efficient_sdp(True)
+        else:
+            torch.backends.cuda.enable_flash_sdp(True)
+            torch.backends.cuda.enable_math_sdp(True)
+            torch.backends.cuda.enable_cudnn_sdp(True)
+            torch.backends.cuda.enable_mem_efficient_sdp(True)
+
+        return module
+
     def forward(
         self,
         x: torch.Tensor,
@@ -127,7 +152,7 @@ class MultiHeadAttention(torch.nn.Module):
         q: Optional[torch.Tensor] = None,
         kv: Optional[torch.Tensor] = None,
         causal=False,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: Optional[torch.Tensor | BlockMask] = None,
     ):
         """
         Compute attention heads.
@@ -141,56 +166,82 @@ class MultiHeadAttention(torch.nn.Module):
         Returns:
             torch.Tensor: Attention output of shape (batch_size, seq_length, d_v_total).
         """
-        assert (causal and attn_mask is None) or (
-            not causal
-        ), "Causal attention is not supported with specified attention mask."
 
-        if parse_version(torch.__version__) >= parse_version("2.0.0"):
-            # Use torch's scaled_dot_product_attention with SDP kernel in torch >= 2.0
-            backends = []
-            if not next(self.parameters()).is_cuda:
-                if torch.cuda.is_available():
-                    warnings.warn(
-                        "Warning: The model is currently running on the CPU, even though CUDA is available. "
-                        "Switching to SDPBackend.MATH, which may significantly impact performance. "
-                        "Consider moving your model to the GPU for optimal efficiency."
-                    )
+        if model_on_gpu(self) and parse_version(torch.__version__) >= parse_version("2.5.0"):
+            assert attn_mask is None or isinstance(
+                attn_mask, BlockMask
+            ), "The provided mask must either be None or a flex_attention BlockMask."
 
-                backends.append(torch.nn.attention.SDPBackend.MATH)
+            assert (causal and attn_mask) or (
+                not causal
+            ), "Causal attention requires the corresponding causal mask for flex attention."
+
+            if self.cross_attn and q is not None and kv is not None:
+                q = rearrange(q, "b s h d -> b h s d")
+                k, v = rearrange(kv, "b s t h d -> t b h s d").unbind(dim=0)
+            elif qkv is not None:
+                q, k, v = rearrange(qkv, "b s t h d -> t b h s d").unbind(dim=0)
             else:
-                # backends.append(torch.nn.attention.SDPBackend.FLASH_ATTENTION)
-                # backends.append(torch.nn.attention.SDPBackend.CUDNN_ATTENTION)
-                backends.append(torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION)
+                raise ValueError("Invalid inputs for attention computation.")
 
-            with torch.nn.attention.sdpa_kernel(
-                backends=backends,
-            ):
-                # Ensure the correct q, k, v setup for cross-attention or self-attention
-                # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
-                # torch's scaled_dot_product_attention
-                if self.cross_attn and q is not None and kv is not None:
-                    q = rearrange(q, "b s h d -> b h s d")
-                    k, v = rearrange(kv, "b s t h d -> t b h s d").unbind(dim=0)
-                elif qkv is not None:
-                    q, k, v = rearrange(qkv, "b s t h d -> t b h s d").unbind(dim=0)
-                else:
-                    raise ValueError("Invalid inputs for attention computation.")
+            # Apply QK-Norm if set, otherwise this applies the identity.
+            q, k = self.qk_scale(q, k)
 
-                # Apply QK-Norm if set, otherwise this applies the identity.
-                q, k = self.qk_scale(q, k)
+            # Currently torch.amp doesn't cover autocasting for flex_attention.
+            # In case of QK-Norm being applied above, q and k are casted to float32 due to normalize being used.
+            # This creates a mismatch between q, k and v. Thus the following is a hack to get the casting right.
+            device = str(q.device)
+            if torch.is_autocast_enabled(device):
+                dtype = torch.get_autocast_dtype(device)
+                q = q.to(dtype)
+                k = k.to(dtype)
+                v = v.to(dtype)
 
-                attention_head_outputs = torch.nn.functional.scaled_dot_product_attention(
-                    q,
-                    k,
-                    v,
-                    attn_mask=attn_mask,
-                    dropout_p=self.dropout_p if self.training else 0.0,
-                    is_causal=causal,
-                    scale=self.mha_scale,
-                )
-                # Revert (b, h, s, d) to (b, s, h d) and flatten tokens per head
-                return rearrange(attention_head_outputs, "b h s d -> b s (h d)")
+            attention_head_outputs = flex_attention(q, k, v, score_mod=None, block_mask=attn_mask)
+
+            # Revert (b, h, s, d) to (b, s, h d) and flatten tokens per head
+            return rearrange(attention_head_outputs, "b h s d -> b s (h d)")
+        elif parse_version(torch.__version__) >= parse_version("2.0.0"):
+            # Use torch's scaled_dot_product_attention with SDP kernel in torch >= 2.0
+
+            # NOTE: As of PyTorch 2.5.1 the context manager `with torch.nn.attention.sdpa_kernel(backends=...)`
+            # is not compatible with torch.compile() - see https://github.com/pytorch/pytorch/pull/135404
+            # Therefore we globally disable math_sdp using torch.backends.cuda.enable_math_sdp() in _apply()
+            # in case the model is moved to a GPU.
+            assert (causal and attn_mask is None) or (
+                not causal
+            ), "Causal attention is not supported with specified attention mask."
+
+            # Ensure the correct q, k, v setup for cross-attention or self-attention
+            # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
+            # torch's scaled_dot_product_attention
+            if self.cross_attn and q is not None and kv is not None:
+                q = rearrange(q, "b s h d -> b h s d")
+                k, v = rearrange(kv, "b s t h d -> t b h s d").unbind(dim=0)
+            elif qkv is not None:
+                q, k, v = rearrange(qkv, "b s t h d -> t b h s d").unbind(dim=0)
+            else:
+                raise ValueError("Invalid inputs for attention computation.")
+
+            # Apply QK-Norm if set, otherwise this applies the identity.
+            q, k = self.qk_scale(q, k)
+
+            attention_head_outputs = torch.nn.functional.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=attn_mask,
+                dropout_p=self.dropout_p if self.training else 0.0,
+                is_causal=causal,
+                scale=self.mha_scale,
+            )
+            # Revert (b, h, s, d) to (b, s, h d) and flatten tokens per head
+            return rearrange(attention_head_outputs, "b h s d -> b s (h d)")
         else:
+            assert (causal and attn_mask is None) or (
+                not causal
+            ), "Causal attention is not supported with specified attention mask."
+
             # Fallback implementation using traditional scaled dot-product attention
             if self.cross_attn and q is not None and kv is not None:
                 k, v = rearrange(kv, "b s t h d -> t b s h d").unbind(dim=0)

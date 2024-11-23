@@ -15,6 +15,10 @@ from pytorch_lightning.callbacks import (
 )
 from pytorch_lightning.loggers.wandb import WandbLogger
 
+# Exclude the main model from jaxtyping for now, as there is a conflict with torch.compile
+# https://github.com/patrick-kidger/jaxtyping/issues/196
+from src.model.model_wrapper import ModelWrapper
+
 # Configure beartype and jaxtyping.
 with install_import_hook(
     ("src",),
@@ -26,7 +30,6 @@ with install_import_hook(
     from src.misc.LocalLogger import LocalLogger
     from src.misc.step_tracker import StepTracker
     from src.misc.wandb_tools import update_checkpoint_path
-    from src.model.model_wrapper import ModelWrapper
 
 
 def cyan(text: str) -> str:
@@ -105,6 +108,7 @@ def train(cfg_dict: DictConfig):
         num_nodes=cfg.trainer.num_nodes,
         strategy="ddp" if torch.cuda.device_count() > 1 else "auto",
         callbacks=callbacks,
+        check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
         val_check_interval=cfg.trainer.val_check_interval,
         enable_progress_bar=cfg.mode == "test",
         gradient_clip_val=cfg.trainer.gradient_clip_val,

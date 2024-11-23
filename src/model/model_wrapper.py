@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
+from functools import lru_cache
 import moviepy.editor as mpy
 import torch
 import wandb
@@ -14,6 +15,7 @@ from torch import Tensor, nn, optim
 import numpy as np
 import json
 from colorama import Fore
+from packaging.version import parse as parse_version
 
 from ..dataset.data_module import get_data_shim
 from ..dataset.types import BatchedExample, BatchedViewsRGBD
@@ -25,6 +27,7 @@ from ..misc.benchmarker import Benchmarker
 from ..misc.image_io import prep_image, save_image, save_video
 from ..misc.LocalLogger import LOG_PATH, LocalLogger
 from ..misc.step_tracker import StepTracker
+from ..misc.utils import tensor_on_gpu, model_on_gpu
 from ..visualization.annotation import add_label
 from ..visualization.camera_trajectory.interpolation import (
     interpolate_extrinsics,
@@ -44,6 +47,11 @@ from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
 import plotly.io as pio
 from wandb import Html
+
+if parse_version(torch.__version__) >= parse_version("2.5.0"):
+    from torch.nn.attention.flex_attention import create_block_mask
+
+    create_block_mask = torch.compile(create_block_mask)
 
 
 @dataclass
@@ -77,7 +85,10 @@ class TrajectoryFn(Protocol):
     def __call__(
         self,
         t: Float[Tensor, " t"],
-    ) -> tuple[Float[Tensor, "batch view 4 4"], Float[Tensor, "batch view 3 3"],]:  # extrinsics  # intrinsics
+    ) -> tuple[
+        Float[Tensor, "batch view 4 4"],
+        Float[Tensor, "batch view 3 3"],
+    ]:  # extrinsics  # intrinsics
         pass
 
 
@@ -109,6 +120,12 @@ class ModelWrapper(LightningModule):
         # Set up the model.
         self.model = LVSM.from_cfg(model_cfg)
 
+        # Compile the model to achieve some speedup.
+        # For now only compile if a GPU is available.
+        if torch.cuda.is_available():
+            print("Using torch.compile() to speed up model.")
+            self.model = torch.compile(self.model, fullgraph=True)
+
         self.data_shim = get_data_shim(self.model)
         self.losses = nn.ModuleList(get_losses(loss_cfg))
 
@@ -123,11 +140,21 @@ class ModelWrapper(LightningModule):
 
     def training_step(self, batch, batch_idx):
         batch: BatchedExample = self.data_shim(batch)
-        _, _, _, h, w = batch["target"]["image"].shape
+
+        b, n_src, _, h, w = batch["context"]["image"].shape
+        _, n_tgt, _, _, _ = batch["target"]["image"].shape
+        device = batch["target"]["image"].device
+
+        n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
+
+        # Get the right mask
+        attn_mask = self.get_mask(
+            num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
+        )
 
         # Run the model.
         output = self.model(
-            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"]
+            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
         )
 
         # Type the output.
@@ -175,13 +202,24 @@ class ModelWrapper(LightningModule):
 
     def test_step(self, batch, batch_idx):
         batch: BatchedExample = self.data_shim(batch)
-        b, v, _, h, w = batch["target"]["image"].shape
+
+        b, n_src, _, h, w = batch["context"]["image"].shape
+        _, n_tgt, _, _, _ = batch["target"]["image"].shape
+        device = batch["target"]["image"].device
+
+        n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
+
         assert b == 1
+
+        # Get the right mask
+        attn_mask = self.get_mask(
+            num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
+        )
 
         # Run the model.
         with self.benchmarker.time("model"):
             output = self.model(
-                batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"]
+                batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
             )
 
         # Type the output.
@@ -269,12 +307,22 @@ class ModelWrapper(LightningModule):
                 f"target = {batch['target']['index'].tolist()}"
             )
 
-        b, _, _, h, w = batch["target"]["image"].shape
+        b, n_src, _, h, w = batch["context"]["image"].shape
+        _, n_tgt, _, _, _ = batch["target"]["image"].shape
+        device = batch["target"]["image"].device
+
+        n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
+
         assert b == 1
+
+        # Get the right mask
+        attn_mask = self.get_mask(
+            num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
+        )
 
         # Run the model.
         output = self.model(
-            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"]
+            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
         )
 
         # Type the output.
@@ -309,7 +357,7 @@ class ModelWrapper(LightningModule):
         images = torch.stack((*batch["context"]["image"][0], *batch["target"]["image"][0]), dim=0)
         intrinsics = torch.stack((*batch["context"]["intrinsics"][0], *batch["target"]["intrinsics"][0]), dim=0)
         extrinsics = torch.stack((*batch["context"]["extrinsics"][0], *batch["target"]["extrinsics"][0]), dim=0)
-        with torch.amp.autocast("cuda" if images.is_cuda else "cpu", enabled=False):
+        with torch.amp.autocast("cuda" if tensor_on_gpu(images) else "cpu", enabled=False):
             fig = visualize_scene(images, extrinsics, intrinsics, generate_gif=False)
 
         html_str = pio.to_html(fig, auto_play=False)
@@ -546,3 +594,90 @@ class ModelWrapper(LightningModule):
                 "frequency": 1,
             },
         }
+
+    def get_mask(self, num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
+        use_flex_attn = model_on_gpu(self) and parse_version(torch.__version__) >= parse_version("2.5.0")
+
+        if use_flex_attn:
+            return ModelWrapper.get_block_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
+        else:
+            return ModelWrapper.get_full_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
+
+    @lru_cache
+    @staticmethod
+    def get_block_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
+        num_tkn_per_view = 16384
+
+        num_src_tkn = num_src_views * num_tkn_per_view
+
+        total_views = num_src_views + num_tgt_views
+        num_tkn = total_views * num_tkn_per_view
+
+        # All context views get the same id.
+        src_view_ids = torch.zeros(num_src_tkn, device=device)
+
+        # For the target views, each view gets its own id.
+        tgt_view_ids = torch.arange(1, num_tgt_views + 1, device=device).repeat_interleave(num_tkn_per_view)
+
+        view_ids = torch.cat([src_view_ids, tgt_view_ids])
+
+        def document_mask(b, h, q_idx, kv_idx):
+            # Allow attention within views.
+            # Remember context views all have the same id, allowing attention between context views.
+            attend_within_views = view_ids[q_idx] == view_ids[kv_idx]
+            # Allow attention from target views to context views.
+            attend_tgt_to_src = view_ids[kv_idx] == 0
+
+            return attend_within_views | attend_tgt_to_src
+
+        # Compute the floor of the log2 of num_tkn_per_view to find the lower bound power of 2
+        log2_floor = np.floor(np.log2(num_tkn_per_view))
+
+        # Calculate the sqrt of the overall number, but in the exponent.
+        # Max with 2^7=128, as this is the minimum multiple currently needed in flex-attention.
+        max_value = max(log2_floor // 2, 7)
+
+        # Calculate the final block size.
+        block_size = 1 << int(max_value)
+
+        block_mask = create_block_mask(document_mask, None, None, num_tkn, num_tkn, device, BLOCK_SIZE=block_size)
+
+        print(f"Built flex-attention block mask:\n{block_mask}")
+
+        return block_mask
+
+    @lru_cache
+    @staticmethod
+    def get_full_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
+        seq_len = (num_src_views + num_tgt_views) * num_tkn_per_view
+        num_src_tkn = num_src_views * num_tkn_per_view
+
+        ## Create attention mask
+        # Step 1: Initialize the final attention mask with zeros
+        # Create an attention mask of shape [(total number of tokens), (total number of tokens)].
+        final_attn_mask = torch.zeros((seq_len, seq_len), dtype=torch.bool, device=device)
+
+        # Step 2: Fill in intra-target attention (block diagonal for each target view)
+        # Target tokens can fully attend to tokens within the same target view but not to tokens in other target views.
+        ones_block = torch.ones((num_tkn_per_view, num_tkn_per_view), dtype=torch.bool, device=device)
+        intra_target_mask = torch.block_diag(*[ones_block for _ in range(num_tgt_views)])
+        final_attn_mask[num_src_tkn:, num_src_tkn:] = intra_target_mask
+
+        # Step 3: Fill in target-to-source and source-to-source attention.
+        # Target tokens attend to all source tokens for contextual information.
+        final_attn_mask[:, :num_src_tkn] = True
+
+        # Example with 1 source view (2 tokens) and 2 target views (each with 2 tokens):
+        # [ 1 1 | 0 0 0 0 ]  <- Source tokens do only attend to themselves.
+        # [ 1 1 | 0 0 0 0 ]
+        # -------------------
+        # [ 1 1 | 1 1 0 0 ]  <- Target tokens from view 1 attend to themselves and source tokens.
+        # [ 1 1 | 1 1 0 0 ]
+        # -------------------
+        # [ 1 1 | 0 0 1 1 ]  <- Target tokens from view 2 attend to themselves and source tokens.
+        # [ 1 1 | 0 0 1 1 ]
+        #
+        # - The upper left block (zero_mask) indicates that source tokens do not attend to any tokens.
+        # - The lower left blocks (tgt_src_attn_mask) indicate that target tokens attend to all source tokens.
+        # - The lower right blocks (tgt_attn_mask) represent intra-target attention, where tokens in the same group can attend to each other.
+        return final_attn_mask

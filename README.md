@@ -14,13 +14,30 @@ cd lvsm
 conda create -n lvsm python=3.10
 conda activate lvsm
 # In case a different CUDA version than the default (12.4) is required, execute the following line with the correct version specified.
-pip install 'torch>=2.5.1' 'torchvision>=0.20' --index-url https://download.pytorch.org/whl/cu121
+pip install 'torch>=2.5.1' 'torchvision>=0.20' --index-url https://download.pytorch.org/whl/cu124
 # In case 3D scene visualisations are needed, install PyTorch3D (fvcore is not needed as a requirement since PyTorch3D v0.7.8)
 # Make sure torch and torchvision is installed first using the line above.
 pip install ninja iopath
 pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
 # Install the rest of the requirements
 pip install -r requirements.txt
+```
+
+If you plan to use `flex-attention` version 2.5.1 of the `torch` package lacks important [fixes](https://github.com/pytorch/pytorch/issues/135161) that currently are only included in the nightly releases. To install them, do the following:
+
+```bash
+git clone https://github.com/kaihelli/lvsm.git
+cd lvsm
+conda create -n lvsm_nightly python=3.10
+conda activate lvsm_nightly
+# For flex-attemtion, install the latest nightly release.
+pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124
+# In case 3D scene visualisations are needed, install PyTorch3D (fvcore is not needed as a requirement since PyTorch3D v0.7.8)
+# Make sure torch and torchvision is installed first using the line above.
+pip install ninja iopath
+pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+# Install the rest of the requirements
+pip install -r requirements_nightly.txt
 ```
 
 ## Acquiring Datasets

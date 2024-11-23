@@ -1,5 +1,5 @@
-torch>=2.5.1 # Latest version of torch that is currently compatible with pytorch-lightning
-torchvision>=0.20
+#torch>=2.5.1 # Latest version of torch that is currently compatible with pytorch-lightning
+#torchvision>=0.20
 tqdm>=4.67.0
 pytorch_lightning>=2.4
 black>=24.10.0

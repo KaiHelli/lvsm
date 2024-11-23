@@ -1,6 +1,8 @@
 import torch
 import functools
 
+from src.misc.utils import tensor_on_gpu
+
 
 class LayerNorm(torch.nn.LayerNorm):
     """
@@ -30,7 +32,7 @@ class LayerNorm(torch.nn.LayerNorm):
         """
 
         if x.dtype == torch.float16 and sum(self.normalized_shape) < 512:
-            with torch.amp.autocast("cuda" if x.is_cuda else "cpu", enabled=False):
+            with torch.amp.autocast("cuda" if tensor_on_gpu(x) else "cpu", enabled=False):
                 return super().forward(x)
         return super().forward(x)
 
