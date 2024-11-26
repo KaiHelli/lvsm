@@ -154,14 +154,13 @@ def get_world_rays(
 
 
 def calculate_plucker_rays(
-    image: Float[Tensor, "*#batch c h w"],
+    img_height: int,
+    img_width: int,
     extrinsics: Float[Tensor, "*#batch 4 4"],
     intrinsics: Float[Tensor, "*#batch 3 3"],
 ) -> Float[Tensor, "*batch 6 h w"]:
-    b, v, _, *grid_shape = image.shape
-
     # Generate image grid coordinates
-    coordinates, _ = sample_image_grid(tuple(grid_shape), device=image.device)
+    coordinates, _ = sample_image_grid((img_height, img_width), device=extrinsics.device)
 
     # Get world rays using the get_world_rays function
     origins, directions = get_world_rays(rearrange(coordinates, "... d -> ... () () d"), extrinsics, intrinsics)
@@ -182,7 +181,7 @@ def calculate_plucker_rays(
 
 
 def plucker_to_point_direction(
-    plucker_rays: Float[Tensor, "*batch 6 h w"], normalize_moment=True
+    plucker_rays: Float[Tensor, "*batch 6 h w"], normalize_moment=False
 ) -> Float[Tensor, "*batch 6 h w"]:
     """
     Convert Plücker rays <D, OxD> to point-direction representation <O, D>.

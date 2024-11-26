@@ -5,7 +5,7 @@ from einops import einsum, rearrange, repeat
 from jaxtyping import Float
 from torch import Tensor
 
-from ...geometry.projection import unproject
+from ...geometry.projection import unproject_rays
 from ..annotation import add_label
 from .lines import draw_lines
 from .types import Scalar, sanitize_scalar
@@ -175,7 +175,7 @@ def unproject_frustum_corners(
     xy = xy[torch.tensor([0, 1, 3, 2], device=device)]
 
     # Get ray directions in camera space.
-    directions = unproject(
+    directions = unproject_rays(
         xy,
         torch.ones(1, dtype=torch.float32, device=device),
         rearrange(intrinsics, "b i j -> b () i j"),

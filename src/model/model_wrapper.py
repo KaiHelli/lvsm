@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
 from functools import lru_cache
-import moviepy.editor as mpy
 import torch
 import wandb
 from einops import pack, rearrange, repeat
@@ -17,6 +16,7 @@ import json
 from colorama import Fore
 from packaging.version import parse as parse_version
 
+from ..geometry.projection import calculate_plucker_rays
 from ..dataset.data_module import get_data_shim
 from ..dataset.types import BatchedExample, BatchedViewsRGBD
 from ..dataset import DatasetCfg
@@ -40,7 +40,7 @@ from ..visualization.camera_trajectory.wobble import (
 from ..visualization.color_map import apply_color_map_to_image
 from ..visualization.layout import add_border, hcat, vcat
 from ..visualization import layout
-from ..geometry.p3d_visualize_scene import visualize_scene
+from ..visualization.p3d_visualize_scene import visualize_scene
 
 from .transformer.norm import LayerNorm, QKScaleUp, QKNorm
 from .lvsm import LVSM, LVSMCfg
@@ -395,12 +395,11 @@ class ModelWrapper(LightningModule):
         #    caption=batch["scene"]
         # )
 
-        # TODO: Look at this.
         # Run video validation step.
-        # self.render_video_interpolation(batch)
-        # self.render_video_wobble(batch)
-        # if self.train_cfg.extended_visualization:
-        #    self.render_video_interpolation_exaggerated(batch)
+        self.render_video_interpolation(batch)
+        self.render_video_wobble(batch)
+        if self.train_cfg.extended_visualization:
+            self.render_video_interpolation_exaggerated(batch)
 
     @rank_zero_only
     def render_video_wobble(self, batch: BatchedExample) -> None:
@@ -490,69 +489,68 @@ class ModelWrapper(LightningModule):
         batch: BatchedExample,
         trajectory_fn: TrajectoryFn,
         name: str,
-        num_frames: int = 30,
+        num_frames: int = 32,
         smooth: bool = True,
         loop_reverse: bool = True,
     ) -> None:
-        # Render probabilistic estimate of scene.
-        gaussians_prob = self.encoder(batch["context"], self.global_step, False)
-        # gaussians_det = self.encoder(batch["context"], self.global_step, True)
+        b, n_src, _, h, w = batch["context"]["image"].shape
+        _, n_tgt, _, _, _ = batch["target"]["image"].shape
+        device = batch["target"]["image"].device
 
-        t = torch.linspace(0, 1, num_frames, dtype=torch.float32, device=self.device)
-        if smooth:
-            t = (torch.cos(torch.pi * (t + 1)) + 1) / 2
+        assert b == 1, "For now only a batch size of 1 is supported."
+        assert num_frames % n_tgt == 0, "For now we need to have the number of frames being divisible by the number of context views."
 
-        extrinsics, intrinsics = trajectory_fn(t)
+        with torch.amp.autocast("cuda" if tensor_on_gpu(batch["context"]["image"]) else "cpu", enabled=False):
+            t = torch.linspace(0, 1, num_frames, dtype=torch.float32, device=self.device)
+            if smooth:
+                t = (torch.cos(torch.pi * (t + 1)) + 1) / 2
 
-        _, _, _, h, w = batch["context"]["image"].shape
+            extrinsics, intrinsics = trajectory_fn(t)
+            plucker_rays = calculate_plucker_rays(img_height=h, img_width=w, extrinsics=extrinsics, intrinsics=intrinsics)
 
-        # Color-map the result.
-        def depth_map(result):
-            near = result[result > 0][:16_000_000].quantile(0.01).log()
-            far = result.view(-1)[:16_000_000].quantile(0.99).log()
-            result = result.log()
-            result = 1 - (result - near) / (far - near)
-            return apply_color_map_to_image(result, "turbo")
+        n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
-        # TODO: Interpolate near and far planes?
-        near = repeat(batch["context"]["near"][:, 0], "b -> b v", v=num_frames)
-        far = repeat(batch["context"]["far"][:, 0], "b -> b v", v=num_frames)
-        output_prob = self.decoder.forward(gaussians_prob, extrinsics, intrinsics, near, far, (h, w), "depth")
-        images_prob = [vcat(rgb, depth) for rgb, depth in zip(output_prob["color"][0], depth_map(output_prob.depth[0]))]
-        # output_det = self.decoder.forward(
-        #     gaussians_det, extrinsics, intrinsics, near, far, (h, w), "depth"
-        # )
-        # images_det = [
-        #     vcat(rgb, depth)
-        #     for rgb, depth in zip(output_det["color"][0], depth_map(output_det.depth[0]))
-        # ]
+        # Get the right mask
+        attn_mask = self.get_mask(
+            num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
+        )
+
+        num_frame_batches = num_frames // n_tgt
+        plucker_rays = rearrange(plucker_rays, "b (nf ntgt) p h w -> b nf ntgt p h w", nf=num_frame_batches, ntgt=n_tgt)
+
+        outputs = []
+        for i in range(num_frame_batches):
+            # Run the model batch-wise.
+            output = self.model(
+                batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays[:, i], attn_mask
+            )
+            outputs.append(output)
+        
+        outputs = torch.cat(outputs, dim=1)
+
         images = [
             add_border(
                 hcat(
-                    add_label(image_prob, "Softmax"),
-                    # add_label(image_det, "Deterministic"),
+                    add_label(output, "Output"),
                 )
             )
-            for image_prob, _ in zip(images_prob, images_prob)
+            for output in outputs[0]
         ]
 
         video = torch.stack(images)
         video = (video.clip(min=0, max=1) * 255).type(torch.uint8).cpu().numpy()
+        
         if loop_reverse:
             video = pack([video, video[::-1][1:-1]], "* c h w")[0]
-        visualizations = {f"video/{name}": wandb.Video(video[None], fps=30, format="mp4")}
 
-        # Since the PyTorch Lightning doesn't support video logging, log to wandb directly.
-        try:
-            wandb.log(visualizations)
-        except Exception:
-            assert isinstance(self.logger, LocalLogger)
-            for key, value in visualizations.items():
-                tensor = value._prepare_video(value.data)
-                clip = mpy.ImageSequenceClip(list(tensor), fps=value._fps)
-                dir = LOG_PATH / key
-                dir.mkdir(exist_ok=True, parents=True)
-                clip.write_videofile(str(dir / f"{self.global_step:0>6}.mp4"), logger=None)
+        self.logger.log_video(
+            f"video/{name}",
+            [video],
+            step=self.global_step,
+            caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
+            fps=[30],
+            format=["mp4"]
+        )
 
     def configure_optimizers(self):
         """

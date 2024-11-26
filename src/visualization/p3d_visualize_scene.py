@@ -16,7 +16,7 @@ from pytorch3d.renderer.mesh import TexturesAtlas
 from pytorch3d.vis.plotly_vis import AxisArgs, plot_scene
 from pytorch3d.utils import cameras_from_opencv_projection
 
-from .projection import get_world_rays, sample_image_grid, get_world_points
+from ..geometry.projection import get_world_rays, sample_image_grid, get_world_points
 
 
 def visualize_cameras(
@@ -253,7 +253,7 @@ def generate_rotation_gif(
 
     return gif_bytes
 
-
+@torch.no_grad
 def visualize_scene(
     images: Float[torch.Tensor, "n c h w"],
     extrinsics: Float[torch.Tensor, "n 4 4"],

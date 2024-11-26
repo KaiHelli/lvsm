@@ -5,7 +5,7 @@ from jaxtyping import Float
 from torch import Tensor
 from einops import rearrange, repeat
 
-from .projection import get_world_rays, sample_image_grid, get_world_points
+from ..geometry.projection import get_world_rays, sample_image_grid, get_world_points
 
 
 def visualize_cameras(
@@ -147,7 +147,7 @@ def draw_images_on_planes(images: Float[np.ndarray, "n c h w"], corners: Float[n
 
     return image_geometries
 
-
+@torch.no_grad
 def visualize_scene(
     images: Float[Tensor, "n c h w"], extrinsics: Float[Tensor, "n 4 4"], intrinsics: Float[Tensor, "n 3 3"]
 ) -> None:

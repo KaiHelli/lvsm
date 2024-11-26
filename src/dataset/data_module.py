@@ -16,7 +16,8 @@ from .shims.plucker_rays import generate_rays_batch
 
 
 def get_data_shim(model: nn.Module) -> DataShim:
-    """Get functions that modify the batch. It's sometimes necessary to modify batches
+    """
+    Get functions that modify the batch. It's sometimes necessary to modify batches
     outside the data loader because GPU computations are required to modify the batch or
     because the modification depends on something outside the data loader.
     """

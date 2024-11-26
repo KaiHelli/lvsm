@@ -1,4 +1,5 @@
 import os
+from shutil import copy2
 from pathlib import Path
 from typing import Any, Optional
 
@@ -33,7 +34,22 @@ class LocalLogger(Logger):
 
     @rank_zero_only
     def log_video(self, key, videos, step=None, **kwargs):
-        pass
+        if not isinstance(videos, list):
+            raise TypeError(f'Expected a list as "videos", found {type(videos)}')
+        n = len(videos)
+        for k, v in kwargs.items():
+            if len(v) != n:
+                raise ValueError(f"Expected {n} items but only found {len(v)} for {k}")
+        kwarg_list = [{k: kwargs[k][i] for k in kwargs} for i in range(n)]
+
+        import wandb
+
+        metrics = {key: [wandb.Video(video, **kwarg) for video, kwarg in zip(videos, kwarg_list)]}
+
+        for i, video in enumerate(metrics[key]):
+            dir = LOG_PATH / key
+            dir.mkdir(exist_ok=True, parents=True)
+            copy2(video._path, f"{dir}/{step:0>6}_{i}.mp4")
 
     @rank_zero_only
     def log_table(
