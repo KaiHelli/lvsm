@@ -258,7 +258,7 @@ def visualize_scene(
     images: Float[torch.Tensor, "n c h w"],
     extrinsics: Float[torch.Tensor, "n 4 4"],
     intrinsics: Float[torch.Tensor, "n 3 3"],
-    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+    device: torch.device | str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     generate_gif: bool = False,
 ) -> Figure | Tuple[Figure, io.BytesIO]:
     """

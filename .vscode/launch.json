@@ -27,6 +27,14 @@
             "module": "src.geometry.o3d_visualize_scene",
             "console": "integratedTerminal",
             "args": [],
+        },
+        {
+            "name": "Debug visualize_scene_trajectory.py",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.scripts.visualize_scene_trajectory",
+            "console": "integratedTerminal",
+            "args": [],
         }
     ]
 }

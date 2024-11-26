@@ -2,7 +2,6 @@ from omegaconf import OmegaConf
 from typing import List
 
 
-# (dataset.image_shape^2 / model.lvsm.patch_size^2) * (dataset.view_sampler.num_context_views + dataset.view_sampler.num_target_views)
 def calculate_exp_seq_len(
     image_shape: List[int], patch_size: int, num_context_views: int, num_target_views: int
 ) -> int:

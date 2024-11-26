@@ -66,6 +66,7 @@ def apply_color_map_3d(vectors: Float[Tensor, "*#batch h w 3"], min_brightness: 
     magnitudes = torch.norm(vectors, dim=-1, keepdim=True)
     directions_normalized = vectors / (magnitudes + 1e-8)  # Avoid division by zero
 
+    # TODO: Is there a better, spherical representation of the color space?
     # Map directions to colors (scaled to [0, 1])
     colors = (directions_normalized + 1) / 2  # Scale [-1, 1] to [0, 1]
 
@@ -80,7 +81,7 @@ def apply_color_map_3d(vectors: Float[Tensor, "*#batch h w 3"], min_brightness: 
     return colors
 
 
-def plucker_to_colormaps(plucker_tensor: Float[Tensor, "*#batch 6 h w"], min_brightness: float = 0.3) -> Tuple[Float[Tensor, "*#batch h w 3"], Float[Tensor, "*#batch h w 3"]]:
+def plucker_to_colormaps(plucker_tensor: Float[Tensor, "*#batch 6 h w"], min_brightness: float = 0.3) -> Tuple[Float[Tensor, "*#batch 3 h w"], Float[Tensor, "*#batch 3 h w"]]:
     """
     Convert a Plücker ray tensor into color maps for directions and momentum.
     

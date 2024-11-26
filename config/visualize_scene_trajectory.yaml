@@ -1,0 +1,32 @@
+defaults:
+  - dataset: re10k
+  - optional dataset/view_sampler_dataset_specific_config: ${dataset/view_sampler}_${dataset}
+  - override dataset/view_sampler: all
+
+dataset:
+  overfit_to_scene: 17d9303ee77c3a3d
+  image_shape: [256, 256]
+  roots: [datasets/re10k]
+  near: 1.
+  far: 100.
+  baseline_scale_bounds: false
+  make_baseline_1: false
+
+data_loader:
+  train:
+    num_workers: 1
+    persistent_workers: false
+    batch_size: 1
+    seed: 34
+  test:
+    num_workers: 1
+    persistent_workers: false
+    batch_size: 1
+    seed: 34
+  val:
+    num_workers: 1
+    persistent_workers: false
+    batch_size: 1
+    seed: 34
+
+seed: 12
