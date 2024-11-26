@@ -57,7 +57,7 @@ train:
   extended_visualization: false
   print_log_every_n_steps: 1
   val_every_n_batches: 50
-  img_every_n_validations: 40       # 50 * 40 -> every 2000 batches
+  vis_every_n_validations: 40       # 50 * 40 -> every 2000 batches
 
 test:
   output_path: outputs/test

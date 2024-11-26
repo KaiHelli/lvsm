@@ -79,7 +79,7 @@ class TrainCfg:
     extended_visualization: bool
     print_log_every_n_steps: int
     val_every_n_batches: int
-    img_every_n_validations: int
+    vis_every_n_validations: int
 
 
 @runtime_checkable
@@ -131,6 +131,13 @@ class ModelWrapper(LightningModule):
         self.data_shim = get_data_shim(self.model)
         self.losses = nn.ModuleList(get_losses(loss_cfg))
 
+        # Track the number of calls to validation_step()
+        # self.register_buffer("num_validations", torch.tensor(0, dtype=torch.int64))
+        self.num_validations = 0
+
+        # Track wether validation just generated visuals to pick that up in the next training_step()
+        self.val_generated_vis = False
+
         # This is used for testing.
         self.benchmarker = Benchmarker()
         self.eval_cnt = 0
@@ -180,7 +187,10 @@ class ModelWrapper(LightningModule):
         self.log("loss/train/total", total_loss)
 
         # Following each image generated in validation, we also want to generate the corresponding output of a training sample.
-        if self.global_rank == 0 and batch_idx % (self.train_cfg.img_every_n_validations * self.train_cfg.val_every_n_batches) == 0:
+        if self.global_rank == 0 and self.val_generated_vis:
+            # Reset state
+            self.val_generated_vis = False
+
             # Construct comparison image.
             comparison_rgb = hcat(
                 add_label(vcat(*batch["context"]["image"][0]), "Context"),
@@ -382,7 +392,10 @@ class ModelWrapper(LightningModule):
             self.log(f"val/ssim_{tag}", ssim)
 
         # Don't upload images and videos in every validation step.
-        if batch_idx % (self.train_cfg.img_every_n_validations * self.train_cfg.val_every_n_batches) == 0:
+        if self.num_validations % self.train_cfg.vis_every_n_validations == 0:
+            # Notify train_step() that visuals have been generated
+            self.val_generated_vis = True
+
             # Construct comparison image.
             comparison = hcat(
                 add_label(vcat(*batch["context"]["image"][0]), "Context"),
@@ -437,6 +450,10 @@ class ModelWrapper(LightningModule):
             self.render_video_wobble(batch)
             if self.train_cfg.extended_visualization:
                 self.render_video_interpolation_exaggerated(batch)
+
+    @rank_zero_only
+    def on_validation_epoch_end(self):
+        self.num_validations += 1
 
     @rank_zero_only
     def render_video_wobble(self, batch: BatchedExample) -> None:
