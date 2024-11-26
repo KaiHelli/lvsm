@@ -58,7 +58,8 @@ def train(cfg_dict: DictConfig):
 
     # Set up logging with wandb.
     callbacks = []
-    if cfg_dict.wandb.mode != "disabled":
+    use_wandb = cfg_dict.wandb.mode != "disabled"
+    if use_wandb:
         wandb_extra_kwargs = {}
         if cfg_dict.wandb.id is not None:
             wandb_extra_kwargs.update({"id": cfg_dict.wandb.id, "resume": "must"})
@@ -116,6 +117,7 @@ def train(cfg_dict: DictConfig):
         max_steps=cfg.trainer.max_steps,
         num_sanity_val_steps=cfg.trainer.num_sanity_val_steps,
         precision=cfg.trainer.precision,
+        log_every_n_steps=cfg.trainer.log_every_n_steps
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
 
@@ -142,12 +144,19 @@ def train(cfg_dict: DictConfig):
         global_rank=trainer.global_rank,
     )
 
+
     if cfg.mode == "train":
+        if use_wandb:
+            logger.watch(model_wrapper)
+            
         trainer.fit(
             model_wrapper,
             datamodule=data_module,
             ckpt_path=(checkpoint_path if cfg.checkpointing.resume else None),
         )
+        
+        if use_wandb:
+            logger.experiment.unwatch(model_wrapper)
     else:
         trainer.test(
             model_wrapper,

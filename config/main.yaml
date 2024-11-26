@@ -56,7 +56,8 @@ train:
   depth_mode: null
   extended_visualization: false
   print_log_every_n_steps: 1
-  log_train_output_img_every_n_batches: ${trainer.val_check_interval}
+  val_every_n_batches: 50
+  img_every_n_validations: 40       # 50 * 40 -> every 2000 batches
 
 test:
   output_path: outputs/test
@@ -70,11 +71,12 @@ seed: 111123
 trainer:
   max_steps: -1
   check_val_every_n_epoch: null
-  val_check_interval: 250
+  val_check_interval: ${train.val_every_n_batches}
   gradient_clip_val: 0.5 # try to use 5.0
   accumulate_grad_batches: 4
   num_sanity_val_steps: 2
   num_nodes: 1
   precision: "bf16-mixed"
+  log_every_n_steps: 10
 
 output_dir: null

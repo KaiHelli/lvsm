@@ -37,7 +37,7 @@ from ..visualization.camera_trajectory.wobble import (
     generate_wobble,
     generate_wobble_transformation,
 )
-from ..visualization.color_map import apply_color_map_to_image
+from ..visualization.color_map import apply_color_map_to_image, plucker_to_colormaps
 from ..visualization.layout import add_border, hcat, vcat
 from ..visualization import layout
 from ..visualization.p3d_visualize_scene import visualize_scene
@@ -78,7 +78,8 @@ class TestCfg:
 class TrainCfg:
     extended_visualization: bool
     print_log_every_n_steps: int
-    log_train_output_img_every_n_batches: int
+    val_every_n_batches: int
+    img_every_n_validations: int
 
 
 @runtime_checkable
@@ -178,16 +179,33 @@ class ModelWrapper(LightningModule):
             total_loss = total_loss + loss
         self.log("loss/train/total", total_loss)
 
-        if self.global_rank == 0 and batch_idx % self.train_cfg.log_train_output_img_every_n_batches == 0:
+        # Following each image generated in validation, we also want to generate the corresponding output of a training sample.
+        if self.global_rank == 0 and batch_idx % (self.train_cfg.img_every_n_validations * self.train_cfg.val_every_n_batches) == 0:
             # Construct comparison image.
-            comparison = hcat(
+            comparison_rgb = hcat(
                 add_label(vcat(*batch["context"]["image"][0]), "Context"),
                 add_label(vcat(*batch["target"]["image"][0]), "Target (Ground Truth)"),
                 add_label(vcat(*output["color"][0]), "Target (Predicted)"),
             )
             self.logger.log_image(
-                "comparison/train",
-                [prep_image(add_border(comparison))],
+                "comparison/train/rgb",
+                [prep_image(add_border(comparison_rgb))],
+                step=self.global_step,
+                caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
+            )
+
+            directions_ctx_cm, momentum_ctx_cm = plucker_to_colormaps(batch["context"]["plucker_rays"][0])
+            directions_tgt_cm, momentum_tgt_cm = plucker_to_colormaps(batch["target"]["plucker_rays"][0])
+
+            comparison_plucker = hcat(
+                add_label(vcat(*directions_ctx_cm), "Context (Direction)"),
+                add_label(vcat(*momentum_ctx_cm), "Context (Momentum)"),
+                add_label(vcat(*directions_tgt_cm), "Target (Direction)"),
+                add_label(vcat(*momentum_tgt_cm), "Target (Momentum)"),
+            )
+            self.logger.log_image(
+                "comparison/train/rays",
+                [prep_image(add_border(comparison_plucker))],
                 step=self.global_step,
                 caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
             )
@@ -363,43 +381,62 @@ class ModelWrapper(LightningModule):
             ssim = compute_ssim(rgb_gt, rgb).mean()
             self.log(f"val/ssim_{tag}", ssim)
 
-        # Construct comparison image.
-        comparison = hcat(
-            add_label(vcat(*batch["context"]["image"][0]), "Context"),
-            add_label(vcat(*rgb_gt), "Target (Ground Truth)"),
-            add_label(vcat(*rgb_out), "Target (Predicted)"),
-        )
-        self.logger.log_image(
-            "comparison/val",
-            [prep_image(add_border(comparison))],
-            step=self.global_step,
-            caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
-        )
+        # Don't upload images and videos in every validation step.
+        if batch_idx % (self.train_cfg.img_every_n_validations * self.train_cfg.val_every_n_batches) == 0:
+            # Construct comparison image.
+            comparison = hcat(
+                add_label(vcat(*batch["context"]["image"][0]), "Context"),
+                add_label(vcat(*rgb_gt), "Target (Ground Truth)"),
+                add_label(vcat(*rgb_out), "Target (Predicted)"),
+            )
 
-        # Visualize scene.
-        images = torch.stack((*batch["context"]["image"][0], *batch["target"]["image"][0]), dim=0)
-        intrinsics = torch.stack((*batch["context"]["intrinsics"][0], *batch["target"]["intrinsics"][0]), dim=0)
-        extrinsics = torch.stack((*batch["context"]["extrinsics"][0], *batch["target"]["extrinsics"][0]), dim=0)
-        with torch.amp.autocast("cuda" if tensor_on_gpu(images) else "cpu", enabled=False):
-            fig = visualize_scene(images, extrinsics, intrinsics, generate_gif=False)
+            self.logger.log_image(
+                "comparison/val/rgb",
+                [prep_image(add_border(comparison))],
+                step=self.global_step,
+                caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
+            )
 
-        html_str = pio.to_html(fig, auto_play=False)
-        html = wandb.Html(html_str)
-        self.logger.log_table("scene/val", columns=["scene_html"], data=[[html]], step=self.global_step)
+            directions_ctx_cm, momentum_ctx_cm = plucker_to_colormaps(batch["context"]["plucker_rays"][0])
+            directions_tgt_cm, momentum_tgt_cm = plucker_to_colormaps(batch["target"]["plucker_rays"][0])
 
-        # Rendering gif takes up too much time in validation
-        # self.logger.log_video(
-        #    "scene_rendered",
-        #    [gif_bytes],
-        #    step=self.global_step,
-        #    caption=batch["scene"]
-        # )
+            comparison_plucker = hcat(
+                add_label(vcat(*directions_ctx_cm), "Context (Direction)"),
+                add_label(vcat(*momentum_ctx_cm), "Context (Momentum)"),
+                add_label(vcat(*directions_tgt_cm), "Target (Direction)"),
+                add_label(vcat(*momentum_tgt_cm), "Target (Momentum)"),
+            )
+            self.logger.log_image(
+                "comparison/val/rays",
+                [prep_image(add_border(comparison_plucker))],
+                step=self.global_step,
+                caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
+            )
 
-        # Run video validation step.
-        self.render_video_interpolation(batch)
-        self.render_video_wobble(batch)
-        if self.train_cfg.extended_visualization:
-            self.render_video_interpolation_exaggerated(batch)
+            # Visualize scene.
+            images = torch.stack((*batch["context"]["image"][0], *batch["target"]["image"][0]), dim=0)
+            intrinsics = torch.stack((*batch["context"]["intrinsics"][0], *batch["target"]["intrinsics"][0]), dim=0)
+            extrinsics = torch.stack((*batch["context"]["extrinsics"][0], *batch["target"]["extrinsics"][0]), dim=0)
+            with torch.amp.autocast("cuda" if tensor_on_gpu(images) else "cpu", enabled=False):
+                fig = visualize_scene(images, extrinsics, intrinsics, generate_gif=False)
+
+            html_str = pio.to_html(fig, auto_play=False)
+            html = wandb.Html(html_str)
+            self.logger.log_table("scene/val", columns=["scene_html"], data=[[html]], step=self.global_step)
+
+            # Rendering gif takes up too much time in validation
+            # self.logger.log_video(
+            #    "scene_rendered",
+            #    [gif_bytes],
+            #    step=self.global_step,
+            #    caption=batch["scene"]
+            # )
+
+            # Run video validation step.
+            self.render_video_interpolation(batch)
+            self.render_video_wobble(batch)
+            if self.train_cfg.extended_visualization:
+                self.render_video_interpolation_exaggerated(batch)
 
     @rank_zero_only
     def render_video_wobble(self, batch: BatchedExample) -> None:
@@ -516,25 +553,29 @@ class ModelWrapper(LightningModule):
         )
 
         num_frame_batches = num_frames // n_tgt
-        plucker_rays = rearrange(plucker_rays, "b (nf ntgt) p h w -> b nf ntgt p h w", nf=num_frame_batches, ntgt=n_tgt)
+        plucker_rays_batched = rearrange(plucker_rays, "b (nf ntgt) p h w -> b nf ntgt p h w", nf=num_frame_batches, ntgt=n_tgt)
 
         outputs = []
         for i in range(num_frame_batches):
             # Run the model batch-wise.
             output = self.model(
-                batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays[:, i], attn_mask
+                batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays_batched[:, i], attn_mask
             )
             outputs.append(output)
         
         outputs = torch.cat(outputs, dim=1)
 
+        directions_cm, momentum_cm = plucker_to_colormaps(plucker_rays)
+
         images = [
             add_border(
                 hcat(
                     add_label(output, "Output"),
+                    add_label(directions, "Plucker Directions"),
+                    add_label(momentum, "Plucker Momentum")
                 )
             )
-            for output in outputs[0]
+            for output, directions, momentum in zip(outputs[0], directions_cm[0], momentum_cm[0])
         ]
 
         video = torch.stack(images)
@@ -542,7 +583,7 @@ class ModelWrapper(LightningModule):
         
         if loop_reverse:
             video = pack([video, video[::-1][1:-1]], "* c h w")[0]
-
+            
         self.logger.log_video(
             f"video/{name}",
             [video],

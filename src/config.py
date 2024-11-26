@@ -36,6 +36,7 @@ class TrainerCfg:
     accumulate_grad_batches: int
     num_sanity_val_steps: int
     precision: str
+    log_every_n_steps: int
     num_nodes: Optional[int] = 1
 
 
