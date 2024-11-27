@@ -69,7 +69,8 @@ class MultiHeadAttention(torch.nn.Module):
                 qk_exp_seq_len is not None
             ), "To initialize QK normalization the expected sequence length is required. "
             qk_exp_seq_len = torch.tensor(float(qk_exp_seq_len))
-            self.qk_scale = QKNorm(torch.log2(torch.pow(qk_exp_seq_len, 2) - qk_exp_seq_len))
+            qk_init_scale = torch.log2(torch.pow(qk_exp_seq_len, 2) - qk_exp_seq_len)
+            self.qk_scale = QKNorm(num_heads=self.num_heads, scale=qk_init_scale)
             self.mha_scale = 1.0
         else:
             self.qk_scale = Identity()
@@ -178,15 +179,20 @@ class MultiHeadAttention(torch.nn.Module):
             ), "Causal attention requires the corresponding causal mask for flex attention."
 
             if self.cross_attn and q is not None and kv is not None:
-                q = rearrange(q, "b s h d -> b h s d")
-                k, v = rearrange(kv, "b s t h d -> t b h s d").unbind(dim=0)
+                k, v = rearrange(kv, "b s t h d -> t b s h d").unbind(dim=0)
             elif qkv is not None:
-                q, k, v = rearrange(qkv, "b s t h d -> t b h s d").unbind(dim=0)
+                q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
             else:
                 raise ValueError("Invalid inputs for attention computation.")
 
             # Apply QK-Norm if set, otherwise this applies the identity.
             q, k = self.qk_scale(q, k)
+
+            # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
+            # torch's scaled_dot_product_attention
+            q = rearrange(q, "b s h d -> b h s d")
+            k = rearrange(k, "b s h d -> b h s d")
+            v = rearrange(v, "b s h d -> b h s d")
 
             # Currently torch.amp doesn't cover autocasting for flex_attention.
             # In case of QK-Norm being applied above, q and k are casted to float32 due to normalize being used.
@@ -214,18 +220,21 @@ class MultiHeadAttention(torch.nn.Module):
             ), "Causal attention is not supported with specified attention mask."
 
             # Ensure the correct q, k, v setup for cross-attention or self-attention
-            # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
-            # torch's scaled_dot_product_attention
             if self.cross_attn and q is not None and kv is not None:
-                q = rearrange(q, "b s h d -> b h s d")
-                k, v = rearrange(kv, "b s t h d -> t b h s d").unbind(dim=0)
+                k, v = rearrange(kv, "b s t h d -> t b s h d").unbind(dim=0)
             elif qkv is not None:
-                q, k, v = rearrange(qkv, "b s t h d -> t b h s d").unbind(dim=0)
+                q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
             else:
                 raise ValueError("Invalid inputs for attention computation.")
 
             # Apply QK-Norm if set, otherwise this applies the identity.
             q, k = self.qk_scale(q, k)
+
+            # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
+            # torch's scaled_dot_product_attention
+            q = rearrange(q, "b s h d -> b h s d")
+            k = rearrange(k, "b s h d -> b h s d")
+            v = rearrange(v, "b s h d -> b h s d")
 
             attention_head_outputs = torch.nn.functional.scaled_dot_product_attention(
                 q,

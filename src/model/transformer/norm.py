@@ -49,10 +49,10 @@ class QKNorm(torch.nn.Module):
     }
     """
 
-    def __init__(self, scale):
+    def __init__(self, num_heads, scale):
         super(QKNorm, self).__init__()
 
-        self.qk_scaling = QKScaleUp(scale)
+        self.qk_scaling = QKScaleUp(num_heads, scale)
 
     def forward(self, q, k):
         q = torch.nn.functional.normalize(q, p=2, dim=-1)
@@ -72,10 +72,13 @@ class QKScaleUp(torch.nn.Module):
     See: https://github.com/CyndxAI/QKNorm/blob/c628cb5d21f1475ba95db779a175748ff9efe940/QKNorm/layers.py#L8C1-L16C30
     """
 
-    def __init__(self, scale):
+    def __init__(self, num_heads, scale):
         super(QKScaleUp, self).__init__()
 
-        self.weight = torch.nn.Parameter(torch.tensor(float(scale)))
+        self.num_heads = num_heads
+        self.weight = torch.nn.Parameter(torch.tensor([float(scale)] * num_heads))
 
     def forward(self, x):
-        return x * self.weight
+        assert x.shape[2] == self.num_heads, "Shape mismatch in head dimension."
+
+        return x * self.weight[None, None, :, None]
