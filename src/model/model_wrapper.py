@@ -225,13 +225,13 @@ class ModelWrapper(LightningModule):
                 Fore.RED
                 + f"train"
                 + Fore.RESET
-                + f" | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}] | "
-                f"loss = {total_loss:.6f} | "
-                f"scene = {[x[:20] for x in batch['scene']]} | "
-                f"bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
-                f"{batch['context']['far'].detach().cpu().numpy().mean()}] | "
-                f"context = {batch['context']['index'].tolist()} | "
-                f"target = {batch['target']['index'].tolist()}"
+                + f" | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}]"
+                f" | loss = {total_loss:.6f}"
+                f" | scene = {[x[:6] for x in batch['scene']]}"
+                f" | bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
+                f"{batch['context']['far'].detach().cpu().numpy().mean()}]"
+                f" | context = {batch['context']['index'].tolist()}"
+                #f" | target = {batch['target']['index'].tolist()}"
             )
         self.log("info/near", batch["context"]["near"].detach().cpu().numpy().mean())
         self.log("info/far", batch["context"]["far"].detach().cpu().numpy().mean())
@@ -543,7 +543,7 @@ class ModelWrapper(LightningModule):
         batch: BatchedExample,
         trajectory_fn: TrajectoryFn,
         name: str,
-        num_frames: int = 32,
+        num_frames: int = 30,
         smooth: bool = True,
         loop_reverse: bool = True,
     ) -> None:

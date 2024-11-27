@@ -6,7 +6,7 @@ defaults:
 
 wandb:
   name: dtu/views2
-  tags: [dtu, 256x256]
+  tags: [dtu, 192x192]
 
 data_loader:
   train:
@@ -22,7 +22,7 @@ loss:
     weight: 0.05
 
 dataset: 
-  image_shape: [256, 256]
+  image_shape: [192, 192]
   roots: [datasets/dtu]
   near: 2.125
   far: 4.525

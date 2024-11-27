@@ -6,7 +6,7 @@ defaults:
 
 wandb:
   name: acid
-  tags: [acid, 256x256]
+  tags: [acid, 196x196]
 
 data_loader:
   train:
@@ -22,7 +22,7 @@ loss:
     weight: 0.05
 
 dataset: 
-  image_shape: [256, 256]
+  image_shape: [192, 192]
   roots: [datasets/acid]
   near: 1.
   far: 100.

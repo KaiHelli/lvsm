@@ -19,9 +19,9 @@ dataset:
 data_loader:
   # Avoid having to spin up new processes to print out visualizations.
   train:
-    num_workers: 10
+    num_workers: 8
     persistent_workers: true
-    batch_size: 3 # was 4
+    batch_size: 4
     seed: 1234
   test:
     num_workers: 4
@@ -56,8 +56,8 @@ train:
   depth_mode: null
   extended_visualization: false
   print_log_every_n_steps: 1
-  val_every_n_batches: 50
-  vis_every_n_validations: 40       # 50 * 40 -> every 2000 batches
+  val_every_n_batches: 64
+  vis_every_n_validations: 64       # 64 * 64 -> every 4.096 batches
 
 test:
   output_path: outputs/test
@@ -72,8 +72,8 @@ trainer:
   max_steps: -1
   check_val_every_n_epoch: null
   val_check_interval: ${train.val_every_n_batches}
-  gradient_clip_val: 0.5 # try to use 5.0
-  accumulate_grad_batches: 4
+  gradient_clip_val: 5.0
+  accumulate_grad_batches: 1
   num_sanity_val_steps: 2
   num_nodes: 1
   precision: "bf16-mixed"

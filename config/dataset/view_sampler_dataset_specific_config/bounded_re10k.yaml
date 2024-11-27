@@ -8,4 +8,4 @@ dataset:
     warm_up_steps: 10_000
     initial_min_distance_between_context_views: 25
     initial_max_distance_between_context_views: 45
-    num_target_views: 4
+    num_target_views: 6
