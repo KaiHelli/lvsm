@@ -74,6 +74,7 @@ class QKScaleUp(torch.nn.Module):
 
     def __init__(self, scale):
         super(QKScaleUp, self).__init__()
+
         self.weight = torch.nn.Parameter(torch.tensor(float(scale)))
 
     def forward(self, x):

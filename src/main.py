@@ -147,7 +147,7 @@ def train(cfg_dict: DictConfig):
 
     if cfg.mode == "train":
         if use_wandb:
-            logger.watch(model_wrapper)
+            logger.watch(model_wrapper, log="all")
             
         trainer.fit(
             model_wrapper,

@@ -43,7 +43,7 @@ class LossLpips(Loss[LossLpipsCfg, LossLpipsCfgWrapper]):
         if global_step < self.cfg.apply_after_step:
             return torch.tensor(0, dtype=torch.float32, device=image.device)
 
-        loss = self.lpips.forward(
+        loss = self.lpips(
             rearrange(prediction["color"], "b v c h w -> (b v) c h w"),
             rearrange(image, "b v c h w -> (b v) c h w"),
             normalize=True,

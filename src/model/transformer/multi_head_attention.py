@@ -68,7 +68,8 @@ class MultiHeadAttention(torch.nn.Module):
             assert (
                 qk_exp_seq_len is not None
             ), "To initialize QK normalization the expected sequence length is required. "
-            self.qk_scale = QKNorm(qk_exp_seq_len)
+            qk_exp_seq_len = torch.tensor(float(qk_exp_seq_len))
+            self.qk_scale = QKNorm(torch.log2(torch.pow(qk_exp_seq_len, 2) - qk_exp_seq_len))
             self.mha_scale = 1.0
         else:
             self.qk_scale = Identity()
