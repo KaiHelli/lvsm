@@ -71,7 +71,7 @@ def load_typed_config(
 ) -> T:
     # Resolve all interpolations before typing.
     OmegaConf.resolve(cfg)
-    
+
     return from_dict(
         data_class,
         OmegaConf.to_container(cfg),

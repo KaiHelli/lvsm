@@ -253,6 +253,7 @@ def generate_rotation_gif(
 
     return gif_bytes
 
+
 @torch.no_grad
 def visualize_scene(
     images: Float[torch.Tensor, "n c h w"],

@@ -552,7 +552,9 @@ class ModelWrapper(LightningModule):
         device = batch["target"]["image"].device
 
         assert b == 1, "For now only a batch size of 1 is supported."
-        assert num_frames % n_tgt == 0, "For now we need to have the number of frames being divisible by the number of context views."
+        assert (
+            num_frames % n_tgt == 0
+        ), "For now we need to have the number of frames being divisible by the number of context views."
 
         with torch.amp.autocast("cuda" if tensor_on_gpu(batch["context"]["image"]) else "cpu", enabled=False):
             t = torch.linspace(0, 1, num_frames, dtype=torch.float32, device=self.device)
@@ -560,7 +562,9 @@ class ModelWrapper(LightningModule):
                 t = (torch.cos(torch.pi * (t + 1)) + 1) / 2
 
             extrinsics, intrinsics = trajectory_fn(t)
-            plucker_rays = calculate_plucker_rays(img_height=h, img_width=w, extrinsics=extrinsics, intrinsics=intrinsics)
+            plucker_rays = calculate_plucker_rays(
+                img_height=h, img_width=w, extrinsics=extrinsics, intrinsics=intrinsics
+            )
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
@@ -570,7 +574,9 @@ class ModelWrapper(LightningModule):
         )
 
         num_frame_batches = num_frames // n_tgt
-        plucker_rays_batched = rearrange(plucker_rays, "b (nf ntgt) p h w -> b nf ntgt p h w", nf=num_frame_batches, ntgt=n_tgt)
+        plucker_rays_batched = rearrange(
+            plucker_rays, "b (nf ntgt) p h w -> b nf ntgt p h w", nf=num_frame_batches, ntgt=n_tgt
+        )
 
         outputs = []
         for i in range(num_frame_batches):
@@ -579,7 +585,7 @@ class ModelWrapper(LightningModule):
                 batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays_batched[:, i], attn_mask
             )
             outputs.append(output)
-        
+
         outputs = torch.cat(outputs, dim=1)
 
         directions_cm, momentum_cm = plucker_to_colormaps(plucker_rays)
@@ -589,7 +595,7 @@ class ModelWrapper(LightningModule):
                 hcat(
                     add_label(output, "Output"),
                     add_label(directions, "Plucker Directions"),
-                    add_label(momentum, "Plucker Momentum")
+                    add_label(momentum, "Plucker Momentum"),
                 )
             )
             for output, directions, momentum in zip(outputs[0], directions_cm[0], momentum_cm[0])
@@ -597,17 +603,17 @@ class ModelWrapper(LightningModule):
 
         video = torch.stack(images)
         video = (video.clip(min=0, max=1) * 255).type(torch.uint8).cpu().numpy()
-        
+
         if loop_reverse:
             video = pack([video, video[::-1][1:-1]], "* c h w")[0]
-            
+
         self.logger.log_video(
             f"video/{name}",
             [video],
             step=self.global_step,
             caption=[f"scene {batch['scene'][0]} | step {self.global_step}"],
             fps=[30],
-            format=["mp4"]
+            format=["mp4"],
         )
 
     def configure_optimizers(self):
@@ -763,7 +769,7 @@ class ModelWrapper(LightningModule):
 
     def forward(self, *args, **kwargs):
         """
-        NOTE: This is a workaround to allow for registered forward-hooks to be called when 
+        NOTE: This is a workaround to allow for registered forward-hooks to be called when
         watching the parameters of this module.
 
         Only use this function during training_step(), to log parameters during training.

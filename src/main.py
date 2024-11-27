@@ -117,7 +117,7 @@ def train(cfg_dict: DictConfig):
         max_steps=cfg.trainer.max_steps,
         num_sanity_val_steps=cfg.trainer.num_sanity_val_steps,
         precision=cfg.trainer.precision,
-        log_every_n_steps=cfg.trainer.log_every_n_steps
+        log_every_n_steps=cfg.trainer.log_every_n_steps,
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
 
@@ -144,17 +144,16 @@ def train(cfg_dict: DictConfig):
         global_rank=trainer.global_rank,
     )
 
-
     if cfg.mode == "train":
         if use_wandb:
             logger.watch(model_wrapper, log="all")
-            
+
         trainer.fit(
             model_wrapper,
             datamodule=data_module,
             ckpt_path=(checkpoint_path if cfg.checkpointing.resume else None),
         )
-        
+
         if use_wandb:
             logger.experiment.unwatch(model_wrapper)
     else:

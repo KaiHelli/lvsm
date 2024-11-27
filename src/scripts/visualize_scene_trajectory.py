@@ -28,12 +28,12 @@ with install_import_hook(
     from src.misc.LocalLogger import LocalLogger
 
 
-
 @dataclass
 class RootCfg:
     dataset: DatasetCfg
     data_loader: DataLoaderCfg
     seed: int
+
 
 @hydra.main(
     version_base=None,
@@ -42,13 +42,13 @@ class RootCfg:
 )
 def visualize_scene_trajectory(cfg_dict: DictConfig):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    
+
     # Boilerplate configuration stuff like in the main file...
     cfg = load_typed_config(cfg_dict, RootCfg)
     set_cfg(cfg_dict)
     torch.manual_seed(cfg_dict.seed)
     data_module = DataModule(cfg.dataset, cfg.data_loader, StepTracker())
-    
+
     # dataset = iter(data_module.train_dataloader())
     dataset = iter(data_module.test_dataloader())
 
@@ -68,7 +68,9 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
     sub_frames = {key: all_frames[key][::10] for key in ["image", "extrinsics", "intrinsics", "plucker_rays"]}
 
     # Visualize the scene in 3D
-    figure = visualize_scene(sub_frames["image"], sub_frames["extrinsics"], sub_frames["intrinsics"], device=device, generate_gif=False)
+    figure = visualize_scene(
+        sub_frames["image"], sub_frames["extrinsics"], sub_frames["intrinsics"], device=device, generate_gif=False
+    )
     figure.show()
 
     # Visualize the scene in a 2D video
@@ -79,7 +81,7 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
             hcat(
                 add_label(output, "View"),
                 add_label(directions, "Plucker Directions"),
-                add_label(momentum, "Plucker Momentum")
+                add_label(momentum, "Plucker Momentum"),
             )
         )
         for output, directions, momentum in zip(all_frames["image"], directions_cm, momentum_cm)
@@ -87,10 +89,10 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
 
     video = torch.stack(images)
     video = (video.clip(min=0, max=1) * 255).type(torch.uint8).cpu().numpy()
-    
+
     # Loop the video in reverse
     video = pack([video, video[::-1][1:-1]], "* c h w")[0]
-    
+
     logger = LocalLogger()
 
     logger.log_video(
@@ -99,7 +101,7 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
         step=0,
         caption=[f"scene {cfg.dataset.overfit_to_scene}"],
         fps=[30],
-        format=["mp4"]
+        format=["mp4"],
     )
 
 
