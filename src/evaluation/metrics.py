@@ -29,7 +29,7 @@ def compute_lpips(
     ground_truth: Float[Tensor, "batch channel height width"],
     predicted: Float[Tensor, "batch channel height width"],
 ) -> Float[Tensor, " batch"]:
-    value = get_lpips(predicted.device).forward(ground_truth, predicted, normalize=True)
+    value = get_lpips(predicted.device)(ground_truth, predicted, normalize=True)
     return value[:, 0, 0, 0]
 
 

@@ -162,7 +162,7 @@ class ModelWrapper(LightningModule):
         )
 
         # Run the model.
-        output = self.model(
+        output = self(
             batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
         )
 
@@ -181,7 +181,7 @@ class ModelWrapper(LightningModule):
         # Compute and log loss.
         total_loss = 0
         for loss_fn in self.losses:
-            loss = loss_fn.forward(output, batch, self.global_step)
+            loss = loss_fn(output, batch, self.global_step)
             self.log(f"loss/train/{loss_fn.name}", loss)
             total_loss = total_loss + loss
         self.log("loss/train/total", total_loss)
@@ -374,7 +374,7 @@ class ModelWrapper(LightningModule):
         # Compute and log loss.
         total_loss = 0
         for loss_fn in self.losses:
-            loss = loss_fn.forward(output, batch, self.global_step)
+            loss = loss_fn(output, batch, self.global_step)
             self.log(f"loss/val/{loss_fn.name}", loss)
             total_loss = total_loss + loss
         self.log("loss/val/total", total_loss)
@@ -760,3 +760,12 @@ class ModelWrapper(LightningModule):
         # - The lower left blocks (tgt_src_attn_mask) indicate that target tokens attend to all source tokens.
         # - The lower right blocks (tgt_attn_mask) represent intra-target attention, where tokens in the same group can attend to each other.
         return final_attn_mask
+
+    def forward(self, *args, **kwargs):
+        """
+        NOTE: This is a workaround to allow for registered forward-hooks to be called when 
+        watching the parameters of this module.
+
+        Only use this function during training_step(), to log parameters during training.
+        """
+        return self.model(*args, **kwargs)
