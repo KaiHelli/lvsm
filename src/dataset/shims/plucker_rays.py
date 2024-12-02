@@ -5,7 +5,7 @@ from src.geometry.projection import calculate_plucker_rays
 def generate_rays_views(views: BatchedViews) -> BatchedViews:
     """Calculate plucker rays for the views."""
 
-    _, _, _, img_height, img_width = views["image"].shape
+    img_height, img_width = views["image"].shape[-2:]
 
     plucker_rays = calculate_plucker_rays(
         img_height=img_height, img_width=img_width, intrinsics=views["intrinsics"], extrinsics=views["extrinsics"]

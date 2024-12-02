@@ -57,9 +57,8 @@ class ViewSamplerBounded(ViewSampler[ViewSamplerBoundedCfg]):
             min_gap = self.cfg.min_distance_between_context_views
 
         # Pick the gap between the context views.
-        # NOTE: we keep the bug untouched to follow initial pixelsplat cfgs
         if not self.cameras_are_circular:
-            max_gap = min(num_views - 1, min_gap)
+            max_gap = min(num_views - 1, max_gap)
         min_gap = max(2 * self.cfg.min_distance_to_context_views, min_gap)
         if max_gap < min_gap:
             raise ValueError("Example does not have enough frames!")

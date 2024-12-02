@@ -1,12 +1,9 @@
-from pathlib import Path
-from random import randrange
 from dataclasses import dataclass
-
 import hydra
 import torch
 from jaxtyping import install_import_hook
 from omegaconf import DictConfig
-from einops import pack
+from einops import pack, rearrange
 from lightning_fabric.utilities.apply_func import move_data_to_device
 
 # Configure beartype and jaxtyping.
@@ -26,6 +23,9 @@ with install_import_hook(
     from src.visualization.p3d_visualize_scene import visualize_scene
     from src.visualization.color_map import plucker_to_colormaps
     from src.misc.LocalLogger import LocalLogger
+
+
+NUM_SCENES = 5
 
 
 @dataclass
@@ -49,60 +49,86 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
     torch.manual_seed(cfg_dict.seed)
     data_module = DataModule(cfg.dataset, cfg.data_loader, StepTracker())
 
-    # dataset = iter(data_module.train_dataloader())
-    dataset = iter(data_module.test_dataloader())
+    dataset = iter(data_module.train_dataloader())
+    # dataset = iter(data_module.test_dataloader())
 
-    # Load all frames of the scene
-    all_frames = next(dataset)["context"]
+    scene_list = []
+    scene_names = []
+    for _ in range(NUM_SCENES):
+        # Load all frames of the scene
+        ds = next(dataset)
+        scene_list += [ds["context"]]
+        scene_names += [ds["scene"]]
+
+    def collate_fn(batch, subsample_frames=1):
+        batch_by_key = {key: [elem[key][0, ::subsample_frames] for elem in batch] for key in batch[0].keys()}
+
+        scene_indices = [
+            i * torch.ones((elem.shape[0]), dtype=torch.long) for i, elem in enumerate(batch_by_key["image"])
+        ]
+        scene_indices = torch.cat(scene_indices, dim=0)
+
+        batch_out = {key: torch.cat(batch_by_key[key], dim=0) for key in batch_by_key.keys()}
+
+        return batch_out, scene_indices
+
+    scenes, scene_indices = collate_fn(scene_list)
+    # Subsample frames for the 3D visualization
+    sub_scenes, sub_scene_indices = collate_fn(scene_list, 10)
 
     # Offload work to the gpu if possible
-    all_frames = move_data_to_device(all_frames, device)
+    scenes = move_data_to_device(scenes, device)
+    scene_indices = move_data_to_device(scene_indices, device)
+
+    sub_scenes = move_data_to_device(sub_scenes, device)
+    sub_scene_indices = move_data_to_device(sub_scene_indices, device)
+
+    scene_ids = torch.unique(scene_indices)
 
     # Calculate the plucker ray embeddings for this scene
-    all_frames = generate_rays_views(all_frames)
-
-    # Remove the outermost singleton batch dimension
-    all_frames = {key: all_frames[key][0] for key in ["image", "extrinsics", "intrinsics", "plucker_rays"]}
-
-    # Subsample frames for the 3D visualization
-    sub_frames = {key: all_frames[key][::10] for key in ["image", "extrinsics", "intrinsics", "plucker_rays"]}
+    scenes = generate_rays_views(scenes)
 
     # Visualize the scene in 3D
     figure = visualize_scene(
-        sub_frames["image"], sub_frames["extrinsics"], sub_frames["intrinsics"], device=device, generate_gif=False
+        sub_scenes["image"], sub_scenes["extrinsics"], sub_scenes["intrinsics"], device=device, generate_gif=False
     )
     figure.show()
 
     # Visualize the scene in a 2D video
-    directions_cm, momentum_cm = plucker_to_colormaps(all_frames["plucker_rays"])
-
-    images = [
-        add_border(
-            hcat(
-                add_label(output, "View"),
-                add_label(directions, "Plucker Directions"),
-                add_label(momentum, "Plucker Momentum"),
-            )
-        )
-        for output, directions, momentum in zip(all_frames["image"], directions_cm, momentum_cm)
-    ]
-
-    video = torch.stack(images)
-    video = (video.clip(min=0, max=1) * 255).type(torch.uint8).cpu().numpy()
-
-    # Loop the video in reverse
-    video = pack([video, video[::-1][1:-1]], "* c h w")[0]
+    directions_cm, momentum_cm = plucker_to_colormaps(scenes["plucker_rays"])
 
     logger = LocalLogger()
 
-    logger.log_video(
-        f"video/{cfg.dataset.overfit_to_scene}",
-        [video],
-        step=0,
-        caption=[f"scene {cfg.dataset.overfit_to_scene}"],
-        fps=[30],
-        format=["mp4"],
-    )
+    for scene_id in scene_ids:
+        scene_images = scenes["image"][scene_indices == scene_id]
+        scene_directions = directions_cm[scene_indices == scene_id]
+        scene_momentum = momentum_cm[scene_indices == scene_id]
+
+        images = [
+            add_border(
+                hcat(
+                    add_label(output, "View"),
+                    add_label(directions, "Plucker Directions"),
+                    add_label(momentum, "Plucker Momentum"),
+                )
+            )
+            for output, directions, momentum in zip(scene_images, scene_directions, scene_momentum)
+        ]
+
+        video = torch.stack(images)
+        video = (video.clip(min=0, max=1) * 255).type(torch.uint8).cpu().numpy()
+
+        # Loop the video in reverse
+        video = pack([video, video[::-1][1:-1]], "* c h w")[0]
+
+        logger.log_video(
+            f"video/{scene_names[scene_id.item()]}",
+            [video],
+            step=0,
+            caption=[f"scene {scene_names[scene_id.item()]}"],
+            fps=[30],
+            format=["mp4"],
+        )
 
 
 if __name__ == "__main__":

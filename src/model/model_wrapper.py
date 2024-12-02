@@ -231,7 +231,7 @@ class ModelWrapper(LightningModule):
                 f" | bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
                 f"{batch['context']['far'].detach().cpu().numpy().mean()}]"
                 f" | context = {batch['context']['index'].tolist()}"
-                #f" | target = {batch['target']['index'].tolist()}"
+                # f" | target = {batch['target']['index'].tolist()}"
             )
         self.log("info/near", batch["context"]["near"].detach().cpu().numpy().mean())
         self.log("info/far", batch["context"]["far"].detach().cpu().numpy().mean())

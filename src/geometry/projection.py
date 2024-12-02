@@ -162,8 +162,12 @@ def calculate_plucker_rays(
     # Generate image grid coordinates
     coordinates, _ = sample_image_grid((img_height, img_width), device=extrinsics.device)
 
+    # Unsqueeze coordinates to match num_batches / num_views
+    unsq_str = "... d -> ..." + " ()" * (extrinsics.ndim - 2) + " d"
+    coordinates = rearrange(coordinates, unsq_str)
+
     # Get world rays using the get_world_rays function
-    origins, directions = get_world_rays(rearrange(coordinates, "... d -> ... () () d"), extrinsics, intrinsics)
+    origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
 
     # Reshape origins and directions back to the original batch and view dimensions
     origins = rearrange(origins, "h w ... c -> ... h w c")

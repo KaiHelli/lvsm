@@ -14,9 +14,10 @@ from pytorch3d.renderer import PerspectiveCameras, RayBundle
 from pytorch3d.structures import Meshes
 from pytorch3d.renderer.mesh import TexturesAtlas
 from pytorch3d.vis.plotly_vis import AxisArgs, plot_scene
-from pytorch3d.utils import cameras_from_opencv_projection
+from pytorch3d.utils import cameras_from_opencv_projection, ico_sphere
 
-from ..geometry.projection import get_world_rays, sample_image_grid, get_world_points
+from ..geometry.projection import get_world_rays, sample_image_grid, get_world_points, calculate_plucker_rays
+from ..visualization.color_map import plucker_to_colormaps
 
 
 def visualize_cameras(
@@ -138,11 +139,8 @@ def draw_images_on_planes(
     # The face mapping is the same for all images
     faces = repeat(faces, "1 f i -> n f i", n=N)
 
-    # Flip images to match the face ordering**
-    images_flipped = torch.flip(images, dims=[2, 3])  # Flip along the height and width dimension
-
     # Each pixel color needs to be duplicated as it consists of two triangles
-    atlas_colors = repeat(images_flipped, "n c h w -> n (h w 2) 1 1 c")
+    atlas_colors = repeat(images, "n c h w -> n (h w 2) 1 1 c")
 
     textures = TexturesAtlas(atlas_colors)
     mesh = Meshes(verts=verts, faces=faces, textures=textures)
@@ -292,12 +290,32 @@ def visualize_scene(
     rays = draw_rays(extrinsics, intrinsics, image_size, 2**0.5)
     images_mesh = draw_images_on_planes(images, extrinsics, intrinsics)
 
+    # Plucker rays
+    plucker_embedding = calculate_plucker_rays(
+        img_height=image_size[0], img_width=image_size[1], extrinsics=extrinsics, intrinsics=intrinsics
+    )
+    plucker_directions_cm, plucker_momentum_cm = plucker_to_colormaps(plucker_embedding)
+
+    plucker_direction_mesh = draw_images_on_planes(plucker_directions_cm, extrinsics, intrinsics)
+    plucker_momentum_mesh = draw_images_on_planes(plucker_momentum_cm, extrinsics, intrinsics)
+
+    dot_radius = 0.05
+    sphere_mesh = ico_sphere(level=1, device=device)
+    # Scale the sphere to the desired radius
+    verts = sphere_mesh.verts_packed() * dot_radius
+    faces = sphere_mesh.faces_packed()
+    sphere_mesh = Meshes(verts=[verts], faces=[faces])
+
     # Use plotly to visualize the scene
     scene = {}
+    scene["root_dot"] = sphere_mesh
+
     for i in range(n):
         scene[f"image_{i}"] = images_mesh[i]
         scene[f"camera_{i}"] = cameras[i]
         scene[f"rays_{i}"] = rays[i]
+        scene[f"plucker_directions_{i}"] = plucker_direction_mesh[i]
+        scene[f"plucker_momentum_{i}"] = plucker_momentum_mesh[i]
 
     fig = plot_scene(
         {"scene": scene},
@@ -309,15 +327,29 @@ def visualize_scene(
 
     for item in fig["data"]:
         name = item["name"]
-        group = name.split("_")[1]
+        group = name.split("_")[-1] if not "points" in name else name.split("_")[1]
 
         item["showlegend"] = True
         item["legendgroup"] = group
         item["legendgrouptitle"] = {"text": f"view_{group}"}
 
-        item["visible"] = "legendonly" if "rays" in name else True
+        item["visible"] = (
+            "legendonly"
+            if name
+            in {f"rays_{group}", f"rays_{group}_points", f"plucker_directions_{group}", f"plucker_momentum_{group}"}
+            else True
+        )
 
     fig.update_legends({"groupclick": "toggleitem"})
+
+    # Rotate camera to fit OpenCV style coordinate system
+    fig.update_layout(
+        scene_camera=dict(
+            up=dict(x=0, y=-1, z=0),
+            center=dict(x=0, y=0, z=0),
+            eye=dict(x=-1.25, y=-1.25, z=-1.25),
+        )
+    )
 
     # Calculate the ranges to display the scene in plotly
     margin = 1
@@ -378,7 +410,7 @@ if __name__ == "__main__":
         z = radius * np.sin(angle)
 
         # Set the translation part of the extrinsic matrix
-        extrinsics[i, :3, 3] = torch.tensor([x, 0, z], device=device)
+        extrinsics[i, :3, 3] = torch.tensor([x + 1, 0, z + 1], device=device)
 
         # Calculate the rotation so that the camera looks towards the origin
         direction = torch.tensor([-x, 0, -z], device=device, dtype=torch.float)  # Point towards the origin
