@@ -79,7 +79,7 @@ class ViewSamplerBounded(ViewSampler[ViewSamplerBoundedCfg]):
             index_context_left = index_context_left * 0
         index_context_right = index_context_left + context_gap
 
-        if self.is_overfitting:
+        if self.overfit_to_scene:
             index_context_left *= 0
             index_context_right *= 0
             index_context_right += max_gap
@@ -101,7 +101,7 @@ class ViewSamplerBounded(ViewSampler[ViewSamplerBoundedCfg]):
                 device=device,
             )
 
-            if self.is_overfitting:
+            if self.overfit_to_scene:
                 # In case of overfitting choose targets evenly spaced between context views, respecting the min distance.
                 index_target = torch.linspace(
                     index_context_left + self.cfg.min_distance_to_context_views,

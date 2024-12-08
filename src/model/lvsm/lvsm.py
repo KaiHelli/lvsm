@@ -1,4 +1,5 @@
 import torch
+from typing import List
 from einops import rearrange
 from einops.layers.torch import Rearrange
 from dataclasses import dataclass, asdict
@@ -6,6 +7,7 @@ from ..transformer import Transformer, TransformerCfg
 from ..transformer.norm import LayerNorm
 from src.dataset.types import DataShim
 from src.dataset.shims.plucker_rays import generate_rays_batch
+from src.dataset.shims.relative_poses import encode_relative_poses_batch
 from functools import lru_cache
 
 
@@ -57,6 +59,9 @@ class LVSM(torch.nn.Module):
             Rearrange("b n h w (c ph pw) -> b n c (h ph) (w pw)", ph=patch_size, pw=patch_size, c=num_channels),
         )
 
+        self.norm_in = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
+        self.norm_out = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
+
     def forward(self, src_img, src_rays, tgt_rays, attn_mask):
         # Tokenize input images and rays
         tkn_src = self.tokenize_input(torch.cat([src_img, src_rays], dim=-3))
@@ -75,6 +80,9 @@ class LVSM(torch.nn.Module):
         # This is a decoder-only model. Concatenate the source and target tokens.
         tkn_in = torch.cat([tkn_src, tkn_tgt], dim=1)
 
+        # Normalize
+        tkn_in = self.norm_in(tkn_in)
+
         # num_tgt_tokens = n * h * w
         # num_tgt_tokens = tkn_tgt.shape[1]
         # num_src_tokens can differ due to the number of input images
@@ -91,14 +99,17 @@ class LVSM(torch.nn.Module):
             tkn_tgt_out, "b (n h w) d -> b n h w d", n=num_tgt_views, h=num_patches_h, w=num_patches_w
         )
 
+        # Normalize
+        tkn_tgt_out = self.norm_out(tkn_tgt_out)
+
         # Untokenize the output
         tgt_img = self.untokenize_output(tkn_tgt_out)
 
         return tgt_img
 
-    def get_data_shim(self) -> DataShim:
+    def get_data_shim(self) -> List[DataShim]:
         """The default shim doesn't modify the batch."""
-        return generate_rays_batch
+        return [encode_relative_poses_batch, generate_rays_batch]
 
     def get_num_tkn_per_view(self, img_height: int, img_width: int) -> int:
         return (img_height * img_width) // (self.patch_size**2)

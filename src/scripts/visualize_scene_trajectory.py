@@ -57,6 +57,11 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
     for _ in range(NUM_SCENES):
         # Load all frames of the scene
         ds = next(dataset)
+
+        # Skip scenes that don't contain enough frames
+        while ds["context"]["image"].shape[1] < 50:
+            ds = next(dataset)
+
         scene_list += [ds["context"]]
         scene_names += [ds["scene"]]
 
@@ -74,7 +79,7 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
 
     scenes, scene_indices = collate_fn(scene_list)
     # Subsample frames for the 3D visualization
-    sub_scenes, sub_scene_indices = collate_fn(scene_list, 10)
+    sub_scenes, sub_scene_indices = collate_fn(scene_list, 20)
 
     # Offload work to the gpu if possible
     scenes = move_data_to_device(scenes, device)

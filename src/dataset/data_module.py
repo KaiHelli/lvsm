@@ -24,7 +24,7 @@ def get_data_shim(model: nn.Module) -> DataShim:
 
     shims: list[DataShim] = []
     if hasattr(model, "get_data_shim"):
-        shims.append(model.get_data_shim())
+        shims += model.get_data_shim()
 
     def combined_shim(batch):
         device_type = batch["target"]["image"].device.type

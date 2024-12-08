@@ -3,7 +3,7 @@ from .encoder import TransformerEncoder
 from .decoder import TransformerDecoder
 from src.dataset.types import DataShim
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass
@@ -151,6 +151,5 @@ class Transformer(torch.nn.Module):
 
             return dec_output
 
-    def get_data_shim(self) -> DataShim:
-        """The default shim doesn't modify the batch."""
-        return lambda x: x
+    def get_data_shim(self) -> List[DataShim]:
+        return []

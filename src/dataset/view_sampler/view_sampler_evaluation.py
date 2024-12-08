@@ -28,11 +28,11 @@ class ViewSamplerEvaluation(ViewSampler[ViewSamplerEvaluationCfg]):
         self,
         cfg: ViewSamplerEvaluationCfg,
         stage: Stage,
-        is_overfitting: bool,
+        overfit_to_scene: bool,
         cameras_are_circular: bool,
         step_tracker: StepTracker | None,
     ) -> None:
-        super().__init__(cfg, stage, is_overfitting, cameras_are_circular, step_tracker)
+        super().__init__(cfg, stage, overfit_to_scene, cameras_are_circular, step_tracker)
 
         dacite_config = Config(cast=[tuple])
         with cfg.index_path.open("r") as f:

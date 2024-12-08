@@ -14,7 +14,7 @@ T = TypeVar("T")
 class ViewSampler(ABC, Generic[T]):
     cfg: T
     stage: Stage
-    is_overfitting: bool
+    overfit_to_scene: bool
     cameras_are_circular: bool
     step_tracker: StepTracker | None
 
@@ -22,13 +22,13 @@ class ViewSampler(ABC, Generic[T]):
         self,
         cfg: T,
         stage: Stage,
-        is_overfitting: bool,
+        overfit_to_scene: bool,
         cameras_are_circular: bool,
         step_tracker: StepTracker | None,
     ) -> None:
         self.cfg = cfg
         self.stage = stage
-        self.is_overfitting = is_overfitting
+        self.overfit_to_scene = overfit_to_scene
         self.cameras_are_circular = cameras_are_circular
         self.step_tracker = step_tracker
 

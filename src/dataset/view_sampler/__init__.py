@@ -21,14 +21,14 @@ ViewSamplerCfg = ViewSamplerArbitraryCfg | ViewSamplerBoundedCfg | ViewSamplerEv
 def get_view_sampler(
     cfg: ViewSamplerCfg,
     stage: Stage,
-    overfit: bool,
+    overfit_to_scene: bool,
     cameras_are_circular: bool,
     step_tracker: StepTracker | None,
 ) -> ViewSampler[Any]:
     return VIEW_SAMPLERS[cfg.name](
         cfg,
         stage,
-        overfit,
+        overfit_to_scene,
         cameras_are_circular,
         step_tracker,
     )

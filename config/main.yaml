@@ -14,7 +14,7 @@ wandb:
 mode: train
 
 dataset:
-  overfit_to_scene: null #48eb62d05fc8104c
+  overfit_to_scene: null
 
 data_loader:
   # Avoid having to spin up new processes to print out visualizations.

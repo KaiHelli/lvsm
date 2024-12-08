@@ -4,7 +4,7 @@ defaults:
   - override dataset/view_sampler: all
 
 dataset:
-  overfit_to_scene: null #17d9303ee77c3a3d
+  overfit_to_scene: null
   image_shape: [192, 192]
   roots: [datasets/re10k]
   near: 1.
