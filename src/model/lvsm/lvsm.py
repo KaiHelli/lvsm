@@ -7,7 +7,7 @@ from ..transformer import Transformer, TransformerCfg
 from ..transformer.norm import LayerNorm
 from src.dataset.types import DataShim
 from src.dataset.shims.plucker_rays import generate_rays_batch
-from src.dataset.shims.relative_poses import encode_relative_poses_batch
+from src.dataset.shims.relative_poses import encode_relative_poses_batch_avgc
 from functools import lru_cache
 
 
@@ -45,16 +45,16 @@ class LVSM(torch.nn.Module):
         # TODO: set bias as false in those linear layers as well?
         self.tokenize_input = torch.nn.Sequential(
             Rearrange("b n c (h ph) (w pw) -> b n h w (c ph pw)", ph=patch_size, pw=patch_size),
-            torch.nn.Linear((num_channels + 6) * (patch_size**2), transformer_cfg.d_model),
+            torch.nn.Linear((num_channels + 6) * (patch_size**2), transformer_cfg.d_model, bias=transformer_cfg.bias),
         )
 
         self.tokenize_target = torch.nn.Sequential(
             Rearrange("b n c (h ph) (w pw) -> b n h w (c ph pw)", ph=patch_size, pw=patch_size),
-            torch.nn.Linear(6 * (patch_size**2), transformer_cfg.d_model),
+            torch.nn.Linear(6 * (patch_size**2), transformer_cfg.d_model, bias=transformer_cfg.bias),
         )
 
         self.untokenize_output = torch.nn.Sequential(
-            torch.nn.Linear(transformer_cfg.d_model, num_channels * (patch_size**2)),
+            torch.nn.Linear(transformer_cfg.d_model, num_channels * (patch_size**2), bias=transformer_cfg.bias),
             torch.nn.Sigmoid(),
             Rearrange("b n h w (c ph pw) -> b n c (h ph) (w pw)", ph=patch_size, pw=patch_size, c=num_channels),
         )
@@ -109,7 +109,7 @@ class LVSM(torch.nn.Module):
 
     def get_data_shim(self) -> List[DataShim]:
         """The default shim doesn't modify the batch."""
-        return [encode_relative_poses_batch, generate_rays_batch]
+        return [encode_relative_poses_batch_avgc, generate_rays_batch]
 
     def get_num_tkn_per_view(self, img_height: int, img_width: int) -> int:
         return (img_height * img_width) // (self.patch_size**2)

@@ -3,7 +3,7 @@ defaults:
 
 name: re10k
 roots: [datasets/re10k]
-make_baseline_1: true
+make_baseline_1: false
 augment: false
 
 image_shape: [180, 320]

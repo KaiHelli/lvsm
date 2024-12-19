@@ -87,10 +87,7 @@ class TrajectoryFn(Protocol):
     def __call__(
         self,
         t: Float[Tensor, " t"],
-    ) -> tuple[
-        Float[Tensor, "batch view 4 4"],
-        Float[Tensor, "batch view 3 3"],
-    ]:  # extrinsics  # intrinsics
+    ) -> tuple[Float[Tensor, "batch view 4 4"], Float[Tensor, "batch view 3 3"],]:  # extrinsics  # intrinsics
         pass
 
 

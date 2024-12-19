@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import hydra
 import torch
+from pathlib import Path
 from jaxtyping import install_import_hook
 from omegaconf import DictConfig
 from einops import pack, rearrange
@@ -16,6 +17,7 @@ with install_import_hook(
     from src.dataset import DatasetCfg
     from src.dataset.data_module import DataLoaderCfg, DataModule
     from src.dataset.shims.plucker_rays import generate_rays_views
+    from src.dataset.shims.relative_poses import encode_relative_poses_batch_avgc
     from src.global_cfg import set_cfg
     from src.misc.step_tracker import StepTracker
     from src.visualization.annotation import add_label
@@ -24,8 +26,8 @@ with install_import_hook(
     from src.visualization.color_map import plucker_to_colormaps
     from src.misc.LocalLogger import LocalLogger
 
-
 NUM_SCENES = 5
+LOG_PATH = Path("outputs/local")
 
 
 @dataclass
@@ -62,11 +64,15 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
         while ds["context"]["image"].shape[1] < 50:
             ds = next(dataset)
 
+        ds = encode_relative_poses_batch_avgc(ds)
+
         scene_list += [ds["context"]]
         scene_names += [ds["scene"]]
 
-    def collate_fn(batch, subsample_frames=1):
-        batch_by_key = {key: [elem[key][0, ::subsample_frames] for elem in batch] for key in batch[0].keys()}
+    def collate_fn(batch, keep_frames=10):
+        batch_by_key = {
+            key: [elem[key][0, :: elem[key].shape[1] // keep_frames] for elem in batch] for key in batch[0].keys()
+        }
 
         scene_indices = [
             i * torch.ones((elem.shape[0]), dtype=torch.long) for i, elem in enumerate(batch_by_key["image"])
@@ -79,7 +85,7 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
 
     scenes, scene_indices = collate_fn(scene_list)
     # Subsample frames for the 3D visualization
-    sub_scenes, sub_scene_indices = collate_fn(scene_list, 20)
+    sub_scenes, sub_scene_indices = collate_fn(scene_list, 5)
 
     # Offload work to the gpu if possible
     scenes = move_data_to_device(scenes, device)
@@ -97,12 +103,16 @@ def visualize_scene_trajectory(cfg_dict: DictConfig):
     figure = visualize_scene(
         sub_scenes["image"], sub_scenes["extrinsics"], sub_scenes["intrinsics"], device=device, generate_gif=False
     )
-    figure.show()
 
     # Visualize the scene in a 2D video
     directions_cm, momentum_cm = plucker_to_colormaps(scenes["plucker_rays"])
 
     logger = LocalLogger()
+
+    # Logger initialization cleans outputs/local therefore write html after.
+    path = LOG_PATH / "scene.html"
+    path.parent.mkdir(exist_ok=True, parents=True)
+    figure.write_html(path)
 
     for scene_id in scene_ids:
         scene_images = scenes["image"][scene_indices == scene_id]
