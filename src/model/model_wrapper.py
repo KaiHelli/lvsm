@@ -724,7 +724,7 @@ class ModelWrapper(LightningModule):
 
         block_mask = create_block_mask(document_mask, None, None, num_tkn, num_tkn, device, BLOCK_SIZE=block_size)
 
-        print(f"Built flex-attention block mask:\n{block_mask}")
+        print(f"Built flex-attention block mask:\n{block_mask.to_string(grid_size=num_src_views+num_tgt_views)}")
 
         return block_mask
 
