@@ -117,15 +117,11 @@ class ModelWrapper(LightningModule):
         self.step_tracker = step_tracker
 
         # Set up the model.
-        self.model = LVSM.from_cfg(model_cfg)
+        self.model_cfg = model_cfg
 
-        # Compile the model to achieve some speedup.
-        # For now only compile if a GPU is available.
-        if torch.cuda.is_available():
-            print("Using torch.compile() to speed up model.")
-            self.model = torch.compile(self.model, fullgraph=True)
+        # Track that the model is not configured yet.
+        self.model_configured = False
 
-        self.data_shim = get_data_shim(self.model)
         self.losses = nn.ModuleList(get_losses(loss_cfg))
 
         # Track the number of calls to validation_step()
@@ -143,6 +139,38 @@ class ModelWrapper(LightningModule):
         if self.test_cfg.compute_scores:
             self.test_step_outputs = {}
             self.time_skip_steps_dict = {"model": 0}
+
+    def configure_model(self):
+        if self.model_configured:
+            return
+
+        self.model = LVSM.from_cfg(self.model_cfg)
+        self.data_shim = get_data_shim(self.model)
+
+        # Compile the model to achieve some speedup.
+        # For now only compile if a GPU is available.
+        if torch.cuda.is_available():
+            print("Using torch.compile() to speed up model.")
+            #self.model = torch.compile(self.model, fullgraph=True)
+
+        # In case the model is not compiled, but the loaded state_dict is from a compiled model, we need to adjust the checkpoint.
+        def patch_compiled(module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+            from torch._dynamo import OptimizedModule
+
+            if not isinstance(module, OptimizedModule):
+                # The model is not compiled. Might need to adjust the state_dict.
+                unwanted_prefix = '_orig_mod.'
+                unwanted_match = prefix + unwanted_prefix
+                for k,v in list(state_dict.items()): 
+                    if k.startswith(unwanted_match): 
+                        new_k = k.replace(unwanted_match, prefix, 1)
+                        state_dict[new_k] = state_dict.pop(k)
+                        print(f"Renamed param: {k} -> {new_k}")
+
+        self.model.register_load_state_dict_pre_hook(patch_compiled)
+
+        # Subsequent calls to configure_model() will be ignored.
+        self.model_configured = True
 
     def training_step(self, batch, batch_idx):
         batch: BatchedExample = self.data_shim(batch)
