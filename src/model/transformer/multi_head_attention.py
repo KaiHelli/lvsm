@@ -168,6 +168,16 @@ class MultiHeadAttention(torch.nn.Module):
         Returns:
             torch.Tensor: Attention output of shape (batch_size, seq_length, d_v_total).
         """
+        # Ensure the correct q, k, v setup for cross-attention or self-attention
+        if self.cross_attn and q is not None and kv is not None:
+            k, v = rearrange(kv, "b s t h d -> t b s h d").unbind(dim=0)
+        elif qkv is not None:
+            q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
+        else:
+            raise ValueError("Invalid inputs for attention computation.")
+
+        # Apply QK-Norm if set, otherwise this applies the identity.
+        q, k = self.qk_scale(q, k)
 
         if model_on_gpu(self) and parse_version(torch.__version__) >= parse_version("2.5.0"):
             assert attn_mask is None or isinstance(
@@ -178,15 +188,7 @@ class MultiHeadAttention(torch.nn.Module):
                 not causal
             ), "Causal attention requires the corresponding causal mask for flex attention."
 
-            if self.cross_attn and q is not None and kv is not None:
-                k, v = rearrange(kv, "b s t h d -> t b s h d").unbind(dim=0)
-            elif qkv is not None:
-                q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
-            else:
-                raise ValueError("Invalid inputs for attention computation.")
-
-            # Apply QK-Norm if set, otherwise this applies the identity.
-            q, k = self.qk_scale(q, k)
+            assert self.dropout_p == 0.0, "Post-Softmax dropout is currently not supported with flex_attention. Pre-softmax can be applied using score_mod."
 
             # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
             # torch's scaled_dot_product_attention
@@ -204,10 +206,10 @@ class MultiHeadAttention(torch.nn.Module):
                 k = k.to(dtype)
                 v = v.to(dtype)
 
-            attention_head_outputs = flex_attention(q, k, v, score_mod=None, block_mask=attn_mask)
+            attention_head_outputs = flex_attention(q, k, v, score_mod=None, block_mask=attn_mask, scale=self.mha_scale)
 
             # Revert (b, h, s, d) to (b, s, h d) and flatten tokens per head
-            return rearrange(attention_head_outputs, "b h s d -> b s (h d)")
+            out = rearrange(attention_head_outputs, "b h s d -> b s (h d)")
         elif parse_version(torch.__version__) >= parse_version("2.0.0"):
             # Use torch's scaled_dot_product_attention with SDP kernel in torch >= 2.0
 
@@ -218,17 +220,6 @@ class MultiHeadAttention(torch.nn.Module):
             assert (causal and attn_mask is None) or (
                 not causal
             ), "Causal attention is not supported with specified attention mask."
-
-            # Ensure the correct q, k, v setup for cross-attention or self-attention
-            if self.cross_attn and q is not None and kv is not None:
-                k, v = rearrange(kv, "b s t h d -> t b s h d").unbind(dim=0)
-            elif qkv is not None:
-                q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
-            else:
-                raise ValueError("Invalid inputs for attention computation.")
-
-            # Apply QK-Norm if set, otherwise this applies the identity.
-            q, k = self.qk_scale(q, k)
 
             # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
             # torch's scaled_dot_product_attention
@@ -246,22 +237,11 @@ class MultiHeadAttention(torch.nn.Module):
                 scale=self.mha_scale,
             )
             # Revert (b, h, s, d) to (b, s, h d) and flatten tokens per head
-            return rearrange(attention_head_outputs, "b h s d -> b s (h d)")
+            out = rearrange(attention_head_outputs, "b h s d -> b s (h d)")
         else:
             assert (causal and attn_mask is None) or (
                 not causal
             ), "Causal attention is not supported with specified attention mask."
-
-            # Fallback implementation using traditional scaled dot-product attention
-            if self.cross_attn and q is not None and kv is not None:
-                k, v = rearrange(kv, "b s t h d -> t b s h d").unbind(dim=0)
-            elif qkv is not None:
-                q, k, v = rearrange(qkv, "b s t h d -> t b s h d").unbind(dim=0)
-            else:
-                raise ValueError("Invalid inputs for attention computation.")
-
-            # Apply QK-Norm if set, otherwise this applies the identity.
-            q, k = self.qk_scale(q, k)
 
             logits = torch.einsum("bnhd,bmhd->bhnm", q, k)
 
@@ -279,6 +259,9 @@ class MultiHeadAttention(torch.nn.Module):
             attn_output = torch.einsum("bhnm,bmhd->bnhd", attn_weights, v)
 
             return rearrange(attn_output, "b s h d -> b s (h d)")
+            out = rearrange(attn_output, "b s h d -> b s (h d)")
+
+        return out
 
     def compute_q_kv(self, x: torch.Tensor, x_kv: Optional[torch.Tensor] = None) -> tuple:
         """
