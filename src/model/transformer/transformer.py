@@ -3,7 +3,7 @@ from .encoder import TransformerEncoder
 from .decoder import TransformerDecoder
 from src.dataset.types import DataShim
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 
 @dataclass
@@ -21,6 +21,7 @@ class TransformerCfg:
     pre_norm: bool
     qk_norm: bool
     qk_exp_seq_len: Optional[int]
+    sdpa_kernel: Literal["flex-attention", "torch-sdpa", "naive", "auto"]
 
 
 class Transformer(torch.nn.Module):
@@ -40,6 +41,7 @@ class Transformer(torch.nn.Module):
             pre_norm=cfg.pre_norm,
             qk_norm=cfg.qk_norm,
             qk_exp_seq_len=cfg.qk_exp_seq_len,
+            sdpa_kernel=cfg.sdpa_kernel,
         )
 
     def __init__(
@@ -58,6 +60,7 @@ class Transformer(torch.nn.Module):
         pre_norm=False,
         qk_norm=False,
         qk_exp_seq_len=None,
+        sdpa_kernel="auto",
     ):
         """
         Transformer model that can be used as encoder-decoder, encoder-only, or decoder-only.
@@ -96,6 +99,7 @@ class Transformer(torch.nn.Module):
                 pre_norm=pre_norm,
                 qk_norm=qk_norm,
                 qk_exp_seq_len=qk_exp_seq_len,
+                sdpa_kernel=sdpa_kernel
             )
         else:
             self.encoder = None
@@ -115,6 +119,7 @@ class Transformer(torch.nn.Module):
                 pre_norm=pre_norm,
                 qk_norm=qk_norm,
                 qk_exp_seq_len=qk_exp_seq_len,
+                sdpa_kernel=sdpa_kernel
             )
         else:
             self.decoder = None

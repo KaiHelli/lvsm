@@ -36,6 +36,7 @@ class MultiHeadAttention(torch.nn.Module):
         bias=True,
         qk_norm=False,
         qk_exp_seq_len=None,
+        sdpa_kernel="auto",
     ):
         """
         Multi-head attention mechanism.
@@ -45,10 +46,11 @@ class MultiHeadAttention(torch.nn.Module):
             d_k (int): Dimension of the key and query space per head.
             d_v (int): Dimension of the value space per head.
             num_heads (int): Number of attention heads.
-            dropout_p (float): Dropout probability to apply after attention weights. Default is 0.1.
+            dropout_p (float): Dropout probability to apply after attention scores. Default is 0.1.
             cross_attn (bool): If True, this layer will be used for cross-attention. Default is False (self-attention).
             qk_norm (bool): If True, QK normalization is applied.
             qk_exp_seq_len (int|None): If qk_norm is true, this defines the expected sequence lengths to initialize the QK normalization scaling parameter g_0.
+            sdpa_kernel (str): The kernel to use for the SDPA operation.
         """
         super().__init__()
 
@@ -62,6 +64,19 @@ class MultiHeadAttention(torch.nn.Module):
         self.cross_attn = cross_attn
         self.bias = bias
         self.qk_norm = qk_norm
+
+        self.sdpa_kernel = sdpa_kernel
+
+        assert sdpa_kernel in ("flex-attention", "torch-sdpa", "naive", "auto"), "Invalid SDPA kernel."
+
+        # Determine the kernel to use for the SDPA operation if mode is set to auto
+        if self.sdpa_kernel == "auto":
+            if torch.cuda.is_available() and parse_version(torch.__version__) >= parse_version("2.5.0"):
+                self.sdpa_kernel = "flex-attention"
+            elif parse_version(torch.__version__) >= parse_version("2.0.0"):
+                self.sdpa_kernel = "torch-sdpa"
+            else:
+                self.sdpa_kernel = "naive"
 
         # Initialize softmax scale parameter
         if self.qk_norm:
@@ -146,6 +161,7 @@ class MultiHeadAttention(torch.nn.Module):
         qkv, q, kv = self.compute_q_kv(x, x_kv)
         attention_head_outputs = self.compute_attention_heads(qkv=qkv, q=q, kv=kv, causal=causal, attn_mask=attn_mask)
         output = self.o_proj(attention_head_outputs)
+
         return output
 
     def compute_attention_heads(
@@ -179,7 +195,7 @@ class MultiHeadAttention(torch.nn.Module):
         # Apply QK-Norm if set, otherwise this applies the identity.
         q, k = self.qk_scale(q, k)
 
-        if model_on_gpu(self) and parse_version(torch.__version__) >= parse_version("2.5.0"):
+        if self.sdpa_kernel == "flex-attention":
             assert attn_mask is None or isinstance(
                 attn_mask, BlockMask
             ), "The provided mask must either be None or a flex_attention BlockMask."
@@ -210,7 +226,7 @@ class MultiHeadAttention(torch.nn.Module):
 
             # Revert (b, h, s, d) to (b, s, h d) and flatten tokens per head
             out = rearrange(attention_head_outputs, "b h s d -> b s (h d)")
-        elif parse_version(torch.__version__) >= parse_version("2.0.0"):
+        elif self.sdpa_kernel == "torch-sdpa":
             # Use torch's scaled_dot_product_attention with SDP kernel in torch >= 2.0
 
             # NOTE: As of PyTorch 2.5.1 the context manager `with torch.nn.attention.sdpa_kernel(backends=...)`

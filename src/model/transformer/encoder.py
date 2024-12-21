@@ -19,6 +19,7 @@ class EncoderBlock(nn.Module):
         pre_norm=False,
         qk_norm=False,
         qk_exp_seq_len=False,
+        sdpa_kernel="auto",
     ):
         """
         Encoder block for the Transformer model.
@@ -35,6 +36,7 @@ class EncoderBlock(nn.Module):
             pre_norm: Apply layer norm in pre- or post-layer fashion.
             qk_norm: Whether to apply qk_norm in the attention layers.
             qk_exp_seq_len: If qk_norm is true, this defines the expected sequence lengths to initialize the QK normalization scaling parameter g_0.
+            sdpa_kernel: The kernel to use for the SDPA operation.
         """
         super().__init__()
         self.activation = activation
@@ -51,6 +53,7 @@ class EncoderBlock(nn.Module):
             bias=bias,
             qk_norm=qk_norm,
             qk_exp_seq_len=qk_exp_seq_len,
+            sdpa_kernel=sdpa_kernel,
         )
 
         # Feedforward layer

@@ -8,7 +8,7 @@ from unittest.mock import patch
 from model.transformer import Transformer
 
 
-def setup_models(pre_norm):
+def setup_models(pre_norm, sdpa_kernel):
     d_model = 512
     nhead = 8
     num_encoder_layers = 6
@@ -43,6 +43,7 @@ def setup_models(pre_norm):
         bias=True,
         pre_norm=pre_norm,
         activation="relu",
+        sdpa_kernel=sdpa_kernel,
     )
 
     return reference_model, our_model
@@ -133,73 +134,69 @@ def copy_weights(reference_model, our_model):
 
 # Combined fixture for torch version and device
 @pytest.fixture(
-    params=[("2.4.1", "cuda"), ("2.4.1", "cpu"), ("1.13.0", "cuda"), ("1.13.0", "cpu"), (None, "cuda"), (None, "cpu")]
+    params=[("torch-sdpa", "cuda"), ("torch-sdpa", "cpu"), ("naive", "cuda"), ("naive", "cpu"), ("flex-attention", "cuda"), ("flex-attention", "cpu")]
 )
-def version_device(request):
-    torch_version, device = request.param
+def sdpa_kernel_device(request):
+    sdpa_kernel, device = request.param
 
     # Skip cases where CUDA is required but not available
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA is not available, skipping GPU test.")
 
     # Skip cases where torch_version is None and device is CPU
-    if torch_version is None and device == "cpu":
+    if sdpa_kernel == "flex-attention" and device == "cpu":
         pytest.skip("Flex attention requires GPU, skipping for CPU.")
 
-    return torch_version, device
+    return sdpa_kernel, device
 
 
 @pytest.mark.parametrize("pre_norm", [True, False])
 @pytest.mark.parametrize(
     "precision", [torch.float16, torch.float32]
 )  # rounding errors of bfloat16 seem to be too high for good comparison of outputs
-def test_transformer_equivalence(version_device, pre_norm, precision):
+def test_transformer_equivalence(sdpa_kernel_device, pre_norm, precision):
     torch.set_float32_matmul_precision("highest")
 
-    torch_version, device = version_device
-    with patch(
-        "torch.__version__",
-        new=torch_version if torch_version is not None else torch.__version__,
-    ):
-        reference_model, our_model = setup_models(pre_norm)
-        reference_model.to(device)
-        our_model.to(device)
-        copy_weights(reference_model, our_model)
+    sdpa_kernel, device = sdpa_kernel_device
+    reference_model, our_model = setup_models(pre_norm, sdpa_kernel)
+    reference_model.to(device)
+    our_model.to(device)
+    copy_weights(reference_model, our_model)
 
-        n_batch = 7
-        n_seq_src = 10
-        n_seq_tgt = 20
-        d_model = 512
+    n_batch = 7
+    n_seq_src = 10
+    n_seq_tgt = 20
+    d_model = 512
 
-        # Create some random input data
-        src = torch.rand((n_batch, n_seq_src, d_model)).to(device)  # (sequence length, batch size, d_model)
-        tgt = torch.rand((n_batch, n_seq_tgt, d_model)).to(device)
+    # Create some random input data
+    src = torch.rand((n_batch, n_seq_src, d_model)).to(device)  # (sequence length, batch size, d_model)
+    tgt = torch.rand((n_batch, n_seq_tgt, d_model)).to(device)
 
-        attn_mask = None
+    attn_mask = None
 
-        if device == "cuda" and torch_version is None:
-            from torch.nn.attention.flex_attention import create_block_mask
+    if device == "cuda" and sdpa_kernel == "flex-attention":
+        from torch.nn.attention.flex_attention import create_block_mask
 
-            def causal_mask(b, h, q_idx, kv_idx):
-                return q_idx >= kv_idx
+        def causal_mask(b, h, q_idx, kv_idx):
+            return q_idx >= kv_idx
 
-            attn_mask = create_block_mask(causal_mask, B=None, H=None, Q_LEN=n_seq_tgt, KV_LEN=n_seq_tgt)
+        attn_mask = create_block_mask(causal_mask, B=None, H=None, Q_LEN=n_seq_tgt, KV_LEN=n_seq_tgt)
 
-            our_model = torch.compile(our_model)
+        our_model = torch.compile(our_model)
 
-        with torch.amp.autocast(device_type=device, dtype=precision):
-            reference_output = reference_model(
-                src,
-                tgt,
-                tgt_mask=nn.Transformer.generate_square_subsequent_mask(n_seq_tgt, device=device),
-                tgt_is_causal=True,
-            )
-            our_output = our_model(src, tgt, tgt_sa_mask=attn_mask)
+    with torch.amp.autocast(device_type=device, dtype=precision):
+        reference_output = reference_model(
+            src,
+            tgt,
+            tgt_mask=nn.Transformer.generate_square_subsequent_mask(n_seq_tgt, device=device),
+            tgt_is_causal=True,
+        )
+        our_output = our_model(src, tgt, tgt_sa_mask=attn_mask)
 
-        # Ensure the outputs are close enough
-        assert torch.allclose(
-            reference_output, our_output, atol=5e-3
-        ), "The outputs of the reference and our implementation do not match!"
+    # Ensure the outputs are close enough
+    assert torch.allclose(
+        reference_output, our_output, atol=5e-3
+    ), "The outputs of the reference and our implementation do not match!"
 
 
 if __name__ == "__main__":

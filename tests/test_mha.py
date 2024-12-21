@@ -9,20 +9,20 @@ from model.transformer.multi_head_attention import MultiHeadAttention
 
 # Combined fixture for torch version and device
 @pytest.fixture(
-    params=[("2.4.1", "cuda"), ("2.4.1", "cpu"), ("1.13.0", "cuda"), ("1.13.0", "cpu"), (None, "cuda"), (None, "cpu")]
+    params=[("torch-sdpa", "cuda"), ("torch-sdpa", "cpu"), ("naive", "cuda"), ("naive", "cpu"), ("flex-attention", "cuda"), ("flex-attention", "cpu")]
 )
-def version_device(request):
-    torch_version, device = request.param
+def sdpa_kernel_device(request):
+    sdpa_kernel, device = request.param
 
     # Skip cases where CUDA is required but not available
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA is not available, skipping GPU test.")
 
     # Skip cases where torch_version is None and device is CPU
-    if torch_version is None and device == "cpu":
+    if sdpa_kernel == "flex-attention" and device == "cpu":
         pytest.skip("Flex attention requires GPU, skipping for CPU.")
 
-    return torch_version, device
+    return sdpa_kernel, device
 
 
 # Parametrize the precision for testing: float32 and float16
@@ -35,18 +35,14 @@ def precision(request):
 
 @pytest.mark.parametrize("cross_attention", [True, False])
 @pytest.mark.parametrize("causal", [True, False])
-def test_attention(version_device, precision, cross_attention, causal):
-    torch_version, device = version_device
+def test_attention(sdpa_kernel_device, precision, cross_attention, causal):
+    sdpa_kernel, device = sdpa_kernel_device
 
     with (
-        patch(
-            "torch.__version__",
-            new=torch_version if torch_version is not None else torch.__version__,
-        ),
         torch.amp.autocast(device_type=device, dtype=precision),
     ):
         print(
-            f"Testing attention on {device = }, {precision = }, {cross_attention = }, {torch_version = }, {causal = }."
+            f"Testing attention on {device = }, {precision = }, {cross_attention = }, {sdpa_kernel = }, {causal = }."
         )
         n_batch = 7
         nhead = 4
@@ -68,6 +64,7 @@ def test_attention(version_device, precision, cross_attention, causal):
             dropout_p=0.0,
             cross_attn=cross_attention,
             bias=True,
+            sdpa_kernel=sdpa_kernel,
         )
 
         kv_len = n_seq_kv if cross_attention else n_seq_q
@@ -81,7 +78,7 @@ def test_attention(version_device, precision, cross_attention, causal):
             attn_mask_test = attn_mask_ref
 
         # Create block mask in case of flex attention
-        if device == "cuda" and torch_version is None:
+        if device == "cuda" and sdpa_kernel == "flex-attention":
             from torch.nn.attention.flex_attention import create_block_mask
 
             if causal:
