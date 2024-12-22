@@ -20,6 +20,7 @@ args = parser.parse_args()
 DATASET_INPUT = Path(args.dataset_input)
 DATASET_OUTPUT = Path(args.dataset_output)
 
+
 def get_target_size(width: int, height: int, min_size: int) -> tuple[int, int]:
     if width < height:
         target_width = min_size
@@ -27,8 +28,9 @@ def get_target_size(width: int, height: int, min_size: int) -> tuple[int, int]:
     else:
         target_width = int(min_size * width / height)
         target_height = min_size
-    
+
     return target_width, target_height
+
 
 def convert_images(
     images: list[UInt8[Tensor, "..."]],
@@ -41,7 +43,7 @@ def convert_images(
 
         # Grab the original format; if None, fall back to something (e.g., "PNG")
         fmt = pil_img.format if pil_img.format is not None else "JPEG"
-        
+
         # Get the original width and height
         width, height = pil_img.size
 
@@ -52,16 +54,17 @@ def convert_images(
 
         # Resize the image
         pil_img = pil_img.resize((target_width, target_height), resample=Image.LANCZOS)
-        
+
         # Save back to raw bytes in the same format
         buf = BytesIO()
         pil_img.save(buf, format=fmt)
-        
+
         # Convert bytes back to a torch.Tensor(dtype=torch.uint8)
         new_image_tensor = torch.frombuffer(buf.getbuffer(), dtype=torch.uint8)
         images_out.append(new_image_tensor)
 
     return images_out
+
 
 if __name__ == "__main__":
     # Create the output directory
@@ -74,7 +77,7 @@ if __name__ == "__main__":
         num_channels, height, width = metadata["expected_shape"]
 
         target_width, target_height = get_target_size(width, height, args.min_size)
-        
+
         # Update the expected shape
         metadata["expected_shape"] = [num_channels, target_width, target_height]
 
@@ -91,7 +94,7 @@ if __name__ == "__main__":
 
     for path in (f_tbar := tqdm(paths, position=0)):
         f_tbar.set_postfix(path=path)
-        
+
         # Load the dataset
         dataset = torch.load(path)
 

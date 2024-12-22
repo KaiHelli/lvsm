@@ -87,7 +87,10 @@ class TrajectoryFn(Protocol):
     def __call__(
         self,
         t: Float[Tensor, " t"],
-    ) -> tuple[Float[Tensor, "batch view 4 4"], Float[Tensor, "batch view 3 3"],]:  # extrinsics  # intrinsics
+    ) -> tuple[
+        Float[Tensor, "batch view 4 4"],
+        Float[Tensor, "batch view 3 3"],
+    ]:  # extrinsics  # intrinsics
         pass
 
 
@@ -154,15 +157,17 @@ class ModelWrapper(LightningModule):
             self.model = torch.compile(self.model, fullgraph=True)
 
         # In case the model is not compiled, but the loaded state_dict is from a compiled model, we need to adjust the checkpoint.
-        def patch_compiled(module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        def patch_compiled(
+            module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        ):
             from torch._dynamo import OptimizedModule
 
             if not isinstance(module, OptimizedModule):
                 # The model is not compiled. Might need to adjust the state_dict.
-                unwanted_prefix = '_orig_mod.'
+                unwanted_prefix = "_orig_mod."
                 unwanted_match = prefix + unwanted_prefix
-                for k,v in list(state_dict.items()): 
-                    if k.startswith(unwanted_match): 
+                for k, v in list(state_dict.items()):
+                    if k.startswith(unwanted_match):
                         new_k = k.replace(unwanted_match, prefix, 1)
                         state_dict[new_k] = state_dict.pop(k)
                         print(f"Renamed param: {k} -> {new_k}")

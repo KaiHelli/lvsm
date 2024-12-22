@@ -99,7 +99,7 @@ class Transformer(torch.nn.Module):
                 pre_norm=pre_norm,
                 qk_norm=qk_norm,
                 qk_exp_seq_len=qk_exp_seq_len,
-                sdpa_kernel=sdpa_kernel
+                sdpa_kernel=sdpa_kernel,
             )
         else:
             self.encoder = None
@@ -119,7 +119,7 @@ class Transformer(torch.nn.Module):
                 pre_norm=pre_norm,
                 qk_norm=qk_norm,
                 qk_exp_seq_len=qk_exp_seq_len,
-                sdpa_kernel=sdpa_kernel
+                sdpa_kernel=sdpa_kernel,
             )
         else:
             self.decoder = None

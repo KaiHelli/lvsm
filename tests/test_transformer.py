@@ -134,7 +134,14 @@ def copy_weights(reference_model, our_model):
 
 # Combined fixture for torch version and device
 @pytest.fixture(
-    params=[("torch-sdpa", "cuda"), ("torch-sdpa", "cpu"), ("naive", "cuda"), ("naive", "cpu"), ("flex-attention", "cuda"), ("flex-attention", "cpu")]
+    params=[
+        ("torch-sdpa", "cuda"),
+        ("torch-sdpa", "cpu"),
+        ("naive", "cuda"),
+        ("naive", "cpu"),
+        ("flex-attention", "cuda"),
+        ("flex-attention", "cpu"),
+    ]
 )
 def sdpa_kernel_device(request):
     sdpa_kernel, device = request.param

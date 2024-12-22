@@ -204,7 +204,9 @@ class MultiHeadAttention(torch.nn.Module):
                 not causal
             ), "Causal attention requires the corresponding causal mask for flex attention."
 
-            assert self.dropout_p == 0.0, "Post-Softmax dropout is currently not supported with flex_attention. Pre-softmax can be applied using score_mod."
+            assert (
+                self.dropout_p == 0.0
+            ), "Post-Softmax dropout is currently not supported with flex_attention. Pre-softmax can be applied using score_mod."
 
             # Rearrange transposes (b, s, h, d) to (b, h, s, d) as that is expected in
             # torch's scaled_dot_product_attention

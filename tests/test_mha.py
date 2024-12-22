@@ -9,7 +9,14 @@ from model.transformer.multi_head_attention import MultiHeadAttention
 
 # Combined fixture for torch version and device
 @pytest.fixture(
-    params=[("torch-sdpa", "cuda"), ("torch-sdpa", "cpu"), ("naive", "cuda"), ("naive", "cpu"), ("flex-attention", "cuda"), ("flex-attention", "cpu")]
+    params=[
+        ("torch-sdpa", "cuda"),
+        ("torch-sdpa", "cpu"),
+        ("naive", "cuda"),
+        ("naive", "cpu"),
+        ("flex-attention", "cuda"),
+        ("flex-attention", "cpu"),
+    ]
 )
 def sdpa_kernel_device(request):
     sdpa_kernel, device = request.param
@@ -38,12 +45,8 @@ def precision(request):
 def test_attention(sdpa_kernel_device, precision, cross_attention, causal):
     sdpa_kernel, device = sdpa_kernel_device
 
-    with (
-        torch.amp.autocast(device_type=device, dtype=precision),
-    ):
-        print(
-            f"Testing attention on {device = }, {precision = }, {cross_attention = }, {sdpa_kernel = }, {causal = }."
-        )
+    with (torch.amp.autocast(device_type=device, dtype=precision),):
+        print(f"Testing attention on {device = }, {precision = }, {cross_attention = }, {sdpa_kernel = }, {causal = }.")
         n_batch = 7
         nhead = 4
         n_seq_q = 534
