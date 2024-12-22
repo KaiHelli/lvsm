@@ -79,7 +79,7 @@ if __name__ == "__main__":
         target_width, target_height = get_target_size(width, height, args.min_size)
 
         # Update the expected shape
-        metadata["expected_shape"] = [num_channels, target_width, target_height]
+        metadata["expected_shape"] = [num_channels, target_height, target_width]
 
         json.dump(metadata, (DATASET_OUTPUT / "meta.json").open("w"), indent=2)
         print(f"Updated metadata: {metadata}")
