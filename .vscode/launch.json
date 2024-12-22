@@ -35,6 +35,14 @@
             "module": "src.scripts.visualize_scene_trajectory",
             "console": "integratedTerminal",
             "args": [],
+        },
+        {
+            "name": "Debug rescale_dataset.py",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.scripts.rescale_dataset",
+            "console": "integratedTerminal",
+            "args": [],
         }
     ]
 }

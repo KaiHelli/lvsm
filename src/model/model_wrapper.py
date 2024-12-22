@@ -151,7 +151,7 @@ class ModelWrapper(LightningModule):
         # For now only compile if a GPU is available.
         if torch.cuda.is_available():
             print("Using torch.compile() to speed up model.")
-            #self.model = torch.compile(self.model, fullgraph=True)
+            self.model = torch.compile(self.model, fullgraph=True)
 
         # In case the model is not compiled, but the loaded state_dict is from a compiled model, we need to adjust the checkpoint.
         def patch_compiled(module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):

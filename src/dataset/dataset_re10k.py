@@ -66,13 +66,27 @@ class DatasetRE10k(IterableDataset):
         if cfg.far != -1:
             self.far = cfg.far
 
+        # Initialize the expected shape with None. Loaded from the metadata.
+        self.expected_shape = None
+
         # Collect chunks.
         self.chunks = []
         for root in cfg.roots:
+            # Load dataset metadata.
+            with (root / "meta.json").open("r") as f:
+                metadata = json.load(f)
+
+                if self.expected_shape is not None:
+                    assert self.expected_shape == tuple(metadata["expected_shape"])
+                else:
+                    self.expected_shape = tuple(metadata["expected_shape"])
+                    print(f"Expected shape for dataset images: {self.expected_shape}")
+
             root = root / self.data_stage
             root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch"])
             print(f"Found {len(root_chunks)} chunks in {root}.")
             self.chunks.extend(root_chunks)
+
         if self.cfg.overfit_to_scene is not None:
             chunk_path = self.index[self.cfg.overfit_to_scene]
             self.chunks = [chunk_path] * len(self.chunks)
@@ -148,8 +162,8 @@ class DatasetRE10k(IterableDataset):
                 target_images = self.convert_images(target_images)
 
                 # Skip the example if the images don't have the right shape.
-                context_image_invalid = context_images.shape[1:] != (3, 360, 640)
-                target_image_invalid = target_images.shape[1:] != (3, 360, 640)
+                context_image_invalid = context_images.shape[1:] != self.expected_shape
+                target_image_invalid = target_images.shape[1:] != self.expected_shape
                 if self.cfg.skip_bad_shape and (context_image_invalid or target_image_invalid):
                     print(
                         f"Skipped bad example {example['key']}. Context shape was "
