@@ -479,23 +479,24 @@ class ModelWrapper(LightningModule):
             )
 
             # Visualize scene.
-            images = torch.stack((*batch["context"]["image"][0], *batch["target"]["image"][0]), dim=0)
-            intrinsics = torch.stack((*batch["context"]["intrinsics"][0], *batch["target"]["intrinsics"][0]), dim=0)
-            extrinsics = torch.stack((*batch["context"]["extrinsics"][0], *batch["target"]["extrinsics"][0]), dim=0)
-            with torch.amp.autocast("cuda" if tensor_on_gpu(images) else "cpu", enabled=False):
-                fig = visualize_scene(images, extrinsics, intrinsics, generate_gif=False)
+            if self.train_cfg.extended_visualization:
+                images = torch.stack((*batch["context"]["image"][0], *batch["target"]["image"][0]), dim=0)
+                intrinsics = torch.stack((*batch["context"]["intrinsics"][0], *batch["target"]["intrinsics"][0]), dim=0)
+                extrinsics = torch.stack((*batch["context"]["extrinsics"][0], *batch["target"]["extrinsics"][0]), dim=0)
+                with torch.amp.autocast("cuda" if tensor_on_gpu(images) else "cpu", enabled=False):
+                    fig = visualize_scene(images, extrinsics, intrinsics, generate_gif=False)
 
-            html_str = pio.to_html(fig, auto_play=False)
-            html = wandb.Html(html_str)
-            self.logger.log_table("scene/val", columns=["scene_html"], data=[[html]], step=self.global_step)
+                html_str = pio.to_html(fig, auto_play=False)
+                html = wandb.Html(html_str)
+                self.logger.log_table("scene/val", columns=["scene_html"], data=[[html]], step=self.global_step)
 
-            # Rendering gif takes up too much time in validation
-            # self.logger.log_video(
-            #    "scene_rendered",
-            #    [gif_bytes],
-            #    step=self.global_step,
-            #    caption=batch["scene"]
-            # )
+                # Rendering gif takes up too much time in validation
+                # self.logger.log_video(
+                #    "scene_rendered",
+                #    [gif_bytes],
+                #    step=self.global_step,
+                #    caption=batch["scene"]
+                # )
 
             # Run video validation step.
             self.render_video_interpolation(batch)
