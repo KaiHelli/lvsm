@@ -211,10 +211,7 @@ class DatasetRE10k(IterableDataset):
     def convert_poses(
         self,
         poses: Float[Tensor, "batch 18"],
-    ) -> tuple[
-        Float[Tensor, "batch 4 4"],
-        Float[Tensor, "batch 3 3"],
-    ]:  # extrinsics  # intrinsics
+    ) -> tuple[Float[Tensor, "batch 4 4"], Float[Tensor, "batch 3 3"],]:  # extrinsics  # intrinsics
         b, _ = poses.shape
 
         # Convert the intrinsics to a 3x3 normalized K matrix.

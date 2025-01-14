@@ -22,10 +22,16 @@ class LVSMCfg:
     transformer_cfg: TransformerCfg
     vae_cfg: VAECfg | None
 
+
 class LVSM(torch.nn.Module):
     @classmethod
     def from_cfg(cls, cfg: LVSMCfg) -> "LVSM":
-        return cls(transformer_cfg=cfg.transformer_cfg, vae_cfg=cfg.vae_cfg, patch_size=cfg.patch_size, num_input_channels=cfg.num_input_channels)
+        return cls(
+            transformer_cfg=cfg.transformer_cfg,
+            vae_cfg=cfg.vae_cfg,
+            patch_size=cfg.patch_size,
+            num_input_channels=cfg.num_input_channels,
+        )
 
     def __init__(
         self,
@@ -53,7 +59,6 @@ class LVSM(torch.nn.Module):
             num_ray_channels = 6
         else:
             self.vae = VAE.from_cfg(vae_cfg)
-            
 
             # Freeze the VAE
             for param in self.vae.parameters():
@@ -66,15 +71,15 @@ class LVSM(torch.nn.Module):
             # e.g. downsample by self.vae.downsample_factor
             # TODO: Make this configurable and factor out the downsample CNN
             downsample_factor = self.vae.downsample_factor
-            assert (downsample_factor & (downsample_factor - 1) == 0), "Downsample factor must be a power of 2."
+            assert downsample_factor & (downsample_factor - 1) == 0, "Downsample factor must be a power of 2."
 
             num_layers = int(log2(downsample_factor))
 
             layers = []
             channels = torch.linspace(6, 16, num_layers + 1, dtype=torch.int).tolist()
             for i in range(num_layers):
-                conv = torch.nn.Conv2d(channels[i], channels[i+1], kernel_size=2, stride=2, bias=transformer_cfg.bias)
-                norm = LayerNorm2d(channels[i+1])
+                conv = torch.nn.Conv2d(channels[i], channels[i + 1], kernel_size=2, stride=2, bias=transformer_cfg.bias)
+                norm = LayerNorm2d(channels[i + 1])
                 act = get_activation_fn("gelu")()
 
                 layers += [conv, norm, act]
@@ -93,7 +98,11 @@ class LVSM(torch.nn.Module):
 
         self.tokenize_input = torch.nn.Sequential(
             Rearrange("b n c (h ph) (w pw) -> b n h w (c ph pw)", ph=patch_size, pw=patch_size),
-            torch.nn.Linear((self.num_patch_channels + num_ray_channels) * (patch_size**2), transformer_cfg.d_model, bias=transformer_cfg.bias),
+            torch.nn.Linear(
+                (self.num_patch_channels + num_ray_channels) * (patch_size**2),
+                transformer_cfg.d_model,
+                bias=transformer_cfg.bias,
+            ),
         )
 
         self.tokenize_target = torch.nn.Sequential(
@@ -102,8 +111,12 @@ class LVSM(torch.nn.Module):
         )
 
         self.untokenize_output = torch.nn.Sequential(
-            torch.nn.Linear(transformer_cfg.d_model, self.num_patch_channels * (patch_size**2), bias=transformer_cfg.bias),
-            Rearrange("b n h w (c ph pw) -> b n c (h ph) (w pw)", ph=patch_size, pw=patch_size, c=self.num_patch_channels),
+            torch.nn.Linear(
+                transformer_cfg.d_model, self.num_patch_channels * (patch_size**2), bias=transformer_cfg.bias
+            ),
+            Rearrange(
+                "b n h w (c ph pw) -> b n c (h ph) (w pw)", ph=patch_size, pw=patch_size, c=self.num_patch_channels
+            ),
         )
 
         self.norm_in = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
@@ -114,7 +127,9 @@ class LVSM(torch.nn.Module):
         if self.vae is not None:
             b = src_img.shape[0]
             # Reshape the source image to match the VAE input shape
-            src_img, src_rays, tgt_rays = [rearrange(x, f"b n c h w -> (b n) c h w") for x in [src_img, src_rays, tgt_rays]]
+            src_img, src_rays, tgt_rays = [
+                rearrange(x, f"b n c h w -> (b n) c h w") for x in [src_img, src_rays, tgt_rays]
+            ]
 
             # Encode source image
             src_img = self.vae.encode(src_img)
@@ -124,7 +139,9 @@ class LVSM(torch.nn.Module):
             tgt_rays = self.downsample_rays(tgt_rays)
 
             # Reshape the source image back to the original shape
-            src_img, src_rays, tgt_rays = [rearrange(x, f"(b n) c h w -> b n c h w", b=b) for x in [src_img, src_rays, tgt_rays]]
+            src_img, src_rays, tgt_rays = [
+                rearrange(x, f"(b n) c h w -> b n c h w", b=b) for x in [src_img, src_rays, tgt_rays]
+            ]
 
         # Tokenize input images and rays
         tkn_src = self.tokenize_input(torch.cat([src_img, src_rays], dim=-3))

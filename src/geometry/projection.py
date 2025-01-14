@@ -130,10 +130,7 @@ def get_world_rays(
     coordinates: Float[Tensor, "*#batch dim"],
     extrinsics: Float[Tensor, "*#batch dim+2 dim+2"],
     intrinsics: Float[Tensor, "*#batch dim+1 dim+1"],
-) -> tuple[
-    Float[Tensor, "*batch dim+1"],
-    Float[Tensor, "*batch dim+1"],
-]:  # origins  # directions
+) -> tuple[Float[Tensor, "*batch dim+1"], Float[Tensor, "*batch dim+1"],]:  # origins  # directions
     # Get camera-space ray directions.
     directions = unproject_directions(
         coordinates,

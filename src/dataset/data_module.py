@@ -57,7 +57,9 @@ class DataLoaderCfg:
     test: DataLoaderStageCfg
     val: DataLoaderStageCfg
 
+
 DatasetShim = Callable[[Dataset, Stage], Dataset]
+
 
 def worker_init_fn(worker_id: int) -> None:
     random.seed(int(torch.utils.data.get_worker_info().seed) % (2**32 - 1))

@@ -88,10 +88,7 @@ class TrajectoryFn(Protocol):
     def __call__(
         self,
         t: Float[Tensor, " t"],
-    ) -> tuple[
-        Float[Tensor, "batch view 4 4"],
-        Float[Tensor, "batch view 3 3"],
-    ]:  # extrinsics  # intrinsics
+    ) -> tuple[Float[Tensor, "batch view 4 4"], Float[Tensor, "batch view 3 3"],]:  # extrinsics  # intrinsics
         pass
 
 
@@ -736,8 +733,12 @@ class ModelWrapper(LightningModule):
         }
 
     def get_mask(self, num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
-        use_flex_attn = self.sdpa_kernel == "flex-attention" or (self.sdpa_kernel == "auto" and torch.cuda.is_available() and parse_version(torch.__version__) >= parse_version("2.5.0"))
-        
+        use_flex_attn = self.sdpa_kernel == "flex-attention" or (
+            self.sdpa_kernel == "auto"
+            and torch.cuda.is_available()
+            and parse_version(torch.__version__) >= parse_version("2.5.0")
+        )
+
         if use_flex_attn:
             return ModelWrapper.get_block_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
         else:
