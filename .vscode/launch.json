@@ -1,7 +1,4 @@
 {
-    // Verwendet IntelliSense zum Ermitteln möglicher Attribute.
-    // Zeigen Sie auf vorhandene Attribute, um die zugehörigen Beschreibungen anzuzeigen.
-    // Weitere Informationen finden Sie unter https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -10,7 +7,13 @@
             "request": "launch",
             "module": "src.main",
             "console": "integratedTerminal",
-            "args": ["+experiment=re10k", "mode=train", "checkpointing.resume=False", "wandb.mode=disabled"],
+            "args": [
+                "+experiment=re10k",
+                "mode=train",
+                "checkpointing.resume=False",
+                "wandb.mode=disabled",
+                "model/transformer@lvsm_cfg.transformer_cfg=lvsm_debug"
+            ]
         },
         {
             "name": "Debug p3d_visualize_scene.py",
@@ -18,7 +21,7 @@
             "request": "launch",
             "module": "src.visualization.p3d_visualize_scene",
             "console": "integratedTerminal",
-            "args": [],
+            "args": []
         },
         {
             "name": "Debug o3d_visualize_scene.py",
@@ -26,7 +29,7 @@
             "request": "launch",
             "module": "src.visualization.o3d_visualize_scene",
             "console": "integratedTerminal",
-            "args": [],
+            "args": []
         },
         {
             "name": "Debug visualize_scene_trajectory.py",
@@ -34,7 +37,7 @@
             "request": "launch",
             "module": "src.scripts.visualize_scene_trajectory",
             "console": "integratedTerminal",
-            "args": [],
+            "args": []
         },
         {
             "name": "Debug rescale_dataset.py",
@@ -42,7 +45,14 @@
             "request": "launch",
             "module": "src.scripts.rescale_dataset",
             "console": "integratedTerminal",
-            "args": [],
+            "args": []
+        },
+        {
+            "name": "Python Debugger: Python File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "justMyCode": false
         }
     ]
 }

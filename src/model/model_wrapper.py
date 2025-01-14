@@ -42,7 +42,8 @@ from ..visualization.layout import add_border, hcat, vcat
 from ..visualization import layout
 from ..visualization.p3d_visualize_scene import visualize_scene
 
-from .transformer.norm import LayerNorm, QKScaleUp, QKNorm
+from .transformer.norm import LayerNorm, LayerNorm2d, QKScaleUp, QKNorm
+from .vae import VAE
 from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
 import plotly.io as pio
@@ -121,6 +122,7 @@ class ModelWrapper(LightningModule):
 
         # Set up the model.
         self.model_cfg = model_cfg
+        self.sdpa_kernel = model_cfg.transformer_cfg.sdpa_kernel
 
         # Track that the model is not configured yet.
         self.model_configured = False
@@ -192,26 +194,37 @@ class ModelWrapper(LightningModule):
         )
 
         # Run the model.
-        output = self(
+        output, output_latent = self(
             batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
         )
-
-        # Type the output.
-        output = BatchedViewsRGBD({"color": output, "depth": None})
 
         target_gt = batch["target"]["image"]
 
         # Compute metrics.
         psnr_probabilistic = compute_psnr(
             rearrange(target_gt, "b v c h w -> (b v) c h w"),
-            rearrange(output["color"], "b v c h w -> (b v) c h w"),
+            rearrange(output, "b v c h w -> (b v) c h w"),
         )
         self.log("train/psnr_probabilistic", psnr_probabilistic.mean())
+
+        # If latent space is used, compute metrics for the latent space.
+        if self.model.vae is not None:
+            target_gt = rearrange(target_gt, "b v c h w -> (b v) c h w")
+            loss_gt = self.model.vae.encode(target_gt)
+            loss_gt = rearrange(loss_gt, "(b v) c h w -> b v c h w", b=b)
+
+            loss_pred = output_latent
+        else:
+            loss_gt = target_gt
+            loss_pred = output
+
+        loss_pred = BatchedViewsRGBD({"color": loss_pred, "depth": None})
+        loss_gt = BatchedViewsRGBD({"color": loss_gt, "depth": None})
 
         # Compute and log loss.
         total_loss = 0
         for loss_fn in self.losses:
-            loss = loss_fn(output, batch, self.global_step)
+            loss = loss_fn(loss_pred, loss_gt, batch, self.global_step)
             self.log(f"loss/train/{loss_fn.name}", loss)
             total_loss = total_loss + loss
         self.log("loss/train/total", total_loss)
@@ -291,7 +304,7 @@ class ModelWrapper(LightningModule):
 
         # Run the model.
         with self.benchmarker.time("model"):
-            output = self.model(
+            output, _ = self.model(
                 batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
             )
 
@@ -394,22 +407,34 @@ class ModelWrapper(LightningModule):
         )
 
         # Run the model.
-        output = self.model(
+        output, output_latent = self.model(
             batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
         )
 
-        # Type the output.
-        output = BatchedViewsRGBD({"color": output, "depth": None})
+        target_gt = batch["target"]["image"]
+
+        # If latent space is used, compute metrics for the latent space.
+        if self.model.vae is not None:
+            target_gt = rearrange(target_gt, "b v c h w -> (b v) c h w")
+            loss_gt = self.model.vae.encode(target_gt)
+            loss_gt = rearrange(loss_gt, "(b v) c h w -> b v c h w", b=b)
+            loss_pred = output_latent
+        else:
+            loss_gt = target_gt
+            loss_pred = output
+
+        loss_pred = BatchedViewsRGBD({"color": loss_pred, "depth": None})
+        loss_gt = BatchedViewsRGBD({"color": loss_gt, "depth": None})
 
         # Compute and log loss.
         total_loss = 0
         for loss_fn in self.losses:
-            loss = loss_fn(output, batch, self.global_step)
+            loss = loss_fn(loss_pred, loss_gt, batch, self.global_step)
             self.log(f"loss/val/{loss_fn.name}", loss)
             total_loss = total_loss + loss
         self.log("loss/val/total", total_loss)
 
-        rgb_out = output["color"][0]
+        rgb_out = output[0]
 
         # Compute validation metrics.
         rgb_gt = batch["target"]["image"][0]
@@ -611,7 +636,7 @@ class ModelWrapper(LightningModule):
         outputs = []
         for i in range(num_frame_batches):
             # Run the model batch-wise.
-            output = self.model(
+            output, _ = self.model(
                 batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays_batched[:, i], attn_mask
             )
             outputs.append(output)
@@ -658,8 +683,8 @@ class ModelWrapper(LightningModule):
         decay = set()
         no_decay = set()
 
-        whitelist_weight_modules = (nn.Linear,)
-        blacklist_weight_modules = (nn.LayerNorm, LayerNorm, QKNorm, QKScaleUp, nn.Embedding)
+        whitelist_weight_modules = (nn.Linear, nn.Conv2d)
+        blacklist_weight_modules = (nn.LayerNorm, LayerNorm, LayerNorm2d, nn.GroupNorm, QKNorm, QKScaleUp, nn.Embedding)
 
         for module_name, module in self.named_modules():
             for param_name, param in module.named_parameters():
@@ -711,8 +736,8 @@ class ModelWrapper(LightningModule):
         }
 
     def get_mask(self, num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
-        use_flex_attn = model_on_gpu(self) and parse_version(torch.__version__) >= parse_version("2.5.0")
-
+        use_flex_attn = self.sdpa_kernel == "flex-attention" or (self.sdpa_kernel == "auto" and torch.cuda.is_available() and parse_version(torch.__version__) >= parse_version("2.5.0"))
+        
         if use_flex_attn:
             return ModelWrapper.get_block_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
         else:

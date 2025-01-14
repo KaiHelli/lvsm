@@ -27,6 +27,7 @@ class Loss(nn.Module, ABC, Generic[T_cfg, T_wrapper]):
     def forward(
         self,
         prediction: BatchedViewsRGBD,
+        ground_truth: BatchedViewsRGBD,
         batch: BatchedExample,
         global_step: int,
     ) -> Float[Tensor, ""]:

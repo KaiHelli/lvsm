@@ -276,7 +276,6 @@ class MultiHeadAttention(torch.nn.Module):
 
             attn_output = torch.einsum("bhnm,bmhd->bnhd", attn_weights, v)
 
-            return rearrange(attn_output, "b s h d -> b s (h d)")
             out = rearrange(attn_output, "b s h d -> b s (h d)")
 
         return out

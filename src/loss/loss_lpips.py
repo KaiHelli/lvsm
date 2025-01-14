@@ -34,10 +34,11 @@ class LossLpips(Loss[LossLpipsCfg, LossLpipsCfgWrapper]):
     def forward(
         self,
         prediction: BatchedViewsRGBD,
+        ground_truth: BatchedViewsRGBD,
         batch: BatchedExample,
         global_step: int,
     ) -> Float[Tensor, ""]:
-        image = batch["target"]["image"]
+        image = ground_truth["color"]
 
         # Before the specified step, don't apply the loss.
         if global_step < self.cfg.apply_after_step:

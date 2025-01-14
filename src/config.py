@@ -22,12 +22,6 @@ class CheckpointingCfg:
 
 
 @dataclass
-class ModelCfg:
-    transformer: TransformerCfg | None
-    lvsm: LVSMCfg | None
-
-
-@dataclass
 class TrainerCfg:
     max_steps: int
     check_val_every_n_epoch: int | None
@@ -46,7 +40,7 @@ class RootCfg:
     mode: Literal["train", "test"]
     dataset: DatasetCfg
     data_loader: DataLoaderCfg
-    model: ModelCfg
+    lvsm_cfg: LVSMCfg
     optimizer: OptimizerCfg
     checkpointing: CheckpointingCfg
     trainer: TrainerCfg

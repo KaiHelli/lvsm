@@ -1,0 +1,4 @@
+hf_model_id: "stabilityai/stable-diffusion-3.5-large"
+hf_gated: true
+num_latent_channels: 16
+downsample_factor: 8

@@ -125,7 +125,7 @@ def train(cfg_dict: DictConfig):
         "optimizer_cfg": cfg.optimizer,
         "test_cfg": cfg.test,
         "train_cfg": cfg.train,
-        "model_cfg": cfg.model.lvsm,
+        "model_cfg": cfg.lvsm_cfg,
         "loss_cfg": cfg.loss,
         "step_tracker": step_tracker,
     }

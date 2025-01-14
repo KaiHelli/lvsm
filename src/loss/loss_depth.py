@@ -25,13 +25,14 @@ class LossDepth(Loss[LossDepthCfg, LossDepthCfgWrapper]):
     def forward(
         self,
         prediction: BatchedViewsRGBD,
+        ground_truth: BatchedViewsRGBD,
         batch: BatchedExample,
         global_step: int,
     ) -> Float[Tensor, ""]:
         # Scale the depth between the near and far planes.
         near = batch["target"]["near"][..., None, None].log()
         far = batch["target"]["far"][..., None, None].log()
-        depth = prediction.depth.minimum(far).maximum(near)
+        depth = prediction["depth"].minimum(far).maximum(near)
         depth = (depth - near) / (far - near)
 
         # Compute the difference between neighboring pixels in each direction.
@@ -45,7 +46,7 @@ class LossDepth(Loss[LossDepthCfg, LossDepthCfgWrapper]):
 
         # If desired, add bilateral filtering.
         if self.cfg.sigma_image is not None:
-            color_gt = batch["target"]["image"]
+            color_gt = ground_truth["color"]
             color_dx = reduce(color_gt.diff(dim=-1), "b v c h w -> b v h w", "max")
             color_dy = reduce(color_gt.diff(dim=-2), "b v c h w -> b v h w", "max")
             if self.cfg.use_second_derivative:

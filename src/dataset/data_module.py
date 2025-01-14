@@ -57,27 +57,7 @@ class DataLoaderCfg:
     test: DataLoaderStageCfg
     val: DataLoaderStageCfg
 
-
-#    shims: DataLoaderShimCfg
-
-
 DatasetShim = Callable[[Dataset, Stage], Dataset]
-
-
-# class RayCollateFn:
-#    """Callable class for the ray collate function, to ensure it is pickleable."""
-
-#    def __init__(self) -> None:
-#        pass
-
-#    def __call__(self, batch: List[dict[str, Any]]) -> dict[str, Any]:
-#        # Stack the batch into tensors
-#        collated_batch = default_collate(batch)
-#        # Generate rays for the 'context' and 'target' views
-#        collated_batch = generate_rays_batch(collated_batch)
-
-#        return collated_batch
-
 
 def worker_init_fn(worker_id: int) -> None:
     random.seed(int(torch.utils.data.get_worker_info().seed) % (2**32 - 1))
@@ -106,9 +86,6 @@ class DataModule(LightningDataModule):
         self.dataset_shim = dataset_shim
         self.global_rank = global_rank
         self.collate_fn = None
-
-    #        if self.data_loader_cfg.shims.calculate_rays:
-    #            self.collate_fn = RayCollateFn()
 
     def get_persistent(self, loader_cfg: DataLoaderStageCfg) -> bool | None:
         return None if loader_cfg.num_workers == 0 else loader_cfg.persistent_workers

@@ -21,8 +21,9 @@ class LossMse(Loss[LossMseCfg, LossMseCfgWrapper]):
     def forward(
         self,
         prediction: BatchedViewsRGBD,
+        ground_truth: BatchedViewsRGBD,
         batch: BatchedExample,
         global_step: int,
     ) -> Float[Tensor, ""]:
-        delta = prediction["color"] - batch["target"]["image"]
+        delta = prediction["color"] - ground_truth["color"]
         return self.cfg.weight * (delta**2).mean()
