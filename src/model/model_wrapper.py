@@ -235,7 +235,7 @@ class ModelWrapper(LightningModule):
             comparison_rgb = hcat(
                 add_label(vcat(*batch["context"]["image"][0]), "Context"),
                 add_label(vcat(*batch["target"]["image"][0]), "Target (Ground Truth)"),
-                add_label(vcat(*output["color"][0]), "Target (Predicted)"),
+                add_label(vcat(*output[0]), "Target (Predicted)"),
             )
             self.logger.log_image(
                 "comparison/train/rgb",
