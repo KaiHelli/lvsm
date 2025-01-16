@@ -76,7 +76,7 @@ class VAE(torch.nn.Module):
         del test_input, test_output
 
     @torch.no_grad()
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
+    def encode(self, x: torch.Tensor, sample: bool = True) -> torch.Tensor:
         """
         Encode an input tensor into VAE latents.
         If `x` is 4D (B, C, H, W), encode directly.
@@ -86,7 +86,7 @@ class VAE(torch.nn.Module):
         if x.ndim == 4:
             latent_dist = self.vae.encode(x, return_dict=False)[0]
             mean, std = latent_dist.mean, latent_dist.std
-            return mean + std * torch.randn_like(mean, device=mean.device)
+            return VAE.sample(mean, std) if sample else (mean, std)
 
         # ----- 5D case -----
         # Decide how many slices to process in parallel
@@ -110,7 +110,7 @@ class VAE(torch.nn.Module):
         mean = rearrange(mean, "b1 (b2 n) c h w -> (b1 b2) n c h w", b2=num_slices)
         std = rearrange(std, "b1 (b2 n) c h w -> (b1 b2) n c h w", b2=num_slices)
 
-        return mean + std * torch.randn_like(mean, device=mean.device)
+        return VAE.sample(mean, std) if sample else (mean, std)
 
         # The following causes issues with torch.compile(), so we do it manually above
         # return self.vae.encode(x).latent_dist.sample()
@@ -140,6 +140,10 @@ class VAE(torch.nn.Module):
         out = rearrange(out, "b1 (b2 n) c h w -> (b1 b2) n c h w", b2=num_slices)
 
         return out
+
+    @staticmethod
+    def sample(mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        return mean + std * torch.randn_like(mean, device=mean.device)
 
     def get_latent_shape(self, input_shape: tuple[int, int]) -> tuple[int, int]:
         return (
