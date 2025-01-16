@@ -1,6 +1,6 @@
 defaults:
   - transformer@transformer_cfg: lvsm_small
-  - vae@vae_cfg: sd35
+  - vae@vae_cfg: null
 
 patch_size: 8
 num_input_channels: 3

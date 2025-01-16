@@ -58,7 +58,8 @@ def generate_coordinate_frame(
 ) -> Float[Tensor, "*batch 3 3"]:
     """Generate a coordinate frame given perpendicular, unit-length Y and Z vectors."""
     y, z = torch.broadcast_tensors(y, z)
-    return torch.stack([y.cross(z), y, z], dim=-1)
+
+    return torch.stack([y.cross(z, dim=-1), y, z], dim=-1)
 
 
 def generate_rotation_coordinate_frame(
@@ -79,7 +80,7 @@ def generate_rotation_coordinate_frame(
     b[parallel] = torch.tensor([0, 1, 0], dtype=b.dtype, device=device)
 
     # Generate the coordinate frame. The initial cross product defines the plane.
-    return generate_coordinate_frame(normalize(a.cross(b)), a)
+    return generate_coordinate_frame(normalize(a.cross(b, dim=-1)), a)
 
 
 def matrix_to_euler(

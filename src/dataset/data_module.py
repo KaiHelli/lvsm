@@ -29,8 +29,9 @@ def get_data_shim(model: nn.Module) -> DataShim:
     def combined_shim(batch):
         device_type = batch["target"]["image"].device.type
 
+        # Disable gradient computation for operations on the dataset to save memory
         # Disable mixed precision for operations on the dataset to keep the data integrity
-        with torch.autocast(device_type=device_type, enabled=False):
+        with torch.no_grad(), torch.autocast(device_type=device_type, enabled=False):
             for shim in shims:
                 batch = shim(batch)
         return batch

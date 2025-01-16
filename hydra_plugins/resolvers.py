@@ -3,7 +3,7 @@ from typing import List
 
 
 def calculate_exp_seq_len(
-    image_shape: List[int], patch_size: int, num_context_views: int, num_target_views: int, vae_cfg: dict
+    image_shape: List[int], patch_size: int, num_context_views: int, num_target_views: int, vae_cfg: dict | None
 ) -> int:
     if vae_cfg is not None:
         downsample_factor = vae_cfg.get("downsample_factor", 1)

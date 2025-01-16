@@ -60,10 +60,6 @@ class LVSM(torch.nn.Module):
         else:
             self.vae = VAE.from_cfg(vae_cfg)
 
-            # Freeze the VAE
-            for param in self.vae.parameters():
-                param.requires_grad = False
-
             self.num_patch_channels = self.vae.num_latent_channels
             num_ray_channels = self.num_patch_channels
 
@@ -126,10 +122,8 @@ class LVSM(torch.nn.Module):
         # If a VAE is used, encode the source image and downsample the rays
         if self.vae is not None:
             b = src_img.shape[0]
-            # Reshape the source image to match the VAE input shape
-            src_img, src_rays, tgt_rays = [
-                rearrange(x, f"b n c h w -> (b n) c h w") for x in [src_img, src_rays, tgt_rays]
-            ]
+            # Reshape the source image to match the expected input shape
+            src_rays, tgt_rays = [rearrange(x, f"b n c h w -> (b n) c h w") for x in [src_rays, tgt_rays]]
 
             # Encode source image
             src_img = self.vae.encode(src_img)
@@ -139,9 +133,7 @@ class LVSM(torch.nn.Module):
             tgt_rays = self.downsample_rays(tgt_rays)
 
             # Reshape the source image back to the original shape
-            src_img, src_rays, tgt_rays = [
-                rearrange(x, f"(b n) c h w -> b n c h w", b=b) for x in [src_img, src_rays, tgt_rays]
-            ]
+            src_rays, tgt_rays = [rearrange(x, f"(b n) c h w -> b n c h w", b=b) for x in [src_rays, tgt_rays]]
 
         # Tokenize input images and rays
         tkn_src = self.tokenize_input(torch.cat([src_img, src_rays], dim=-3))
@@ -188,17 +180,11 @@ class LVSM(torch.nn.Module):
         # If a VAE is used, decode the output
         if self.vae is not None:
             tgt_latent = tgt_img
-
-            b = tgt_img.shape[0]
-            tgt_img = rearrange(tgt_img, f"b n c h w -> (b n) c h w")
-
-            tgt_img = self.vae.decode(tgt_img).clamp(0, 1)
-
-            tgt_img = rearrange(tgt_img, f"(b n) c h w -> b n c h w", b=b)
+            tgt_img = self.vae.decode(tgt_latent).clamp(0, 1)
         else:
             tgt_latent = None
             # Map the output to [0, 1] for RGB output
-            tgt_img = torch.nn.functional.sigmoid(tgt_latent)
+            tgt_img = torch.nn.functional.sigmoid(tgt_img)
 
         return tgt_img, tgt_latent
 

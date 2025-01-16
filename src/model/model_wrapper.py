@@ -15,6 +15,7 @@ import numpy as np
 import json
 from colorama import Fore
 from packaging.version import parse as parse_version
+from time import perf_counter
 
 from ..geometry.projection import calculate_plucker_rays
 from ..dataset.data_module import get_data_shim
@@ -177,6 +178,8 @@ class ModelWrapper(LightningModule):
         self.model_configured = True
 
     def training_step(self, batch, batch_idx):
+        step_time_start = perf_counter()
+
         batch: BatchedExample = self.data_shim(batch)
 
         b, n_src, _, h, w = batch["context"]["image"].shape
@@ -206,9 +209,7 @@ class ModelWrapper(LightningModule):
 
         # If latent space is used, compute metrics for the latent space.
         if self.model.vae is not None:
-            target_gt = rearrange(target_gt, "b v c h w -> (b v) c h w")
             loss_gt = self.model.vae.encode(target_gt)
-            loss_gt = rearrange(loss_gt, "(b v) c h w -> b v c h w", b=b)
 
             loss_pred = output_latent
         else:
@@ -225,6 +226,9 @@ class ModelWrapper(LightningModule):
             self.log(f"loss/train/{loss_fn.name}", loss)
             total_loss = total_loss + loss
         self.log("loss/train/total", total_loss)
+
+        # Log the time taken for the step.
+        step_time = perf_counter() - step_time_start
 
         # Following each image generated in validation, we also want to generate the corresponding output of a training sample.
         if self.global_rank == 0 and self.val_generated_vis:
@@ -266,7 +270,8 @@ class ModelWrapper(LightningModule):
                 + f"train"
                 + Fore.RESET
                 + f" | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}]"
-                f" | loss = {total_loss:.6f}"
+                f" | time = {step_time:.6f} s"
+                f"| loss = {total_loss:.6f}"
                 f" | scene = {[x[:6] for x in batch['scene']]}"
                 f" | bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
                 f"{batch['context']['far'].detach().cpu().numpy().mean()}]"
@@ -412,9 +417,7 @@ class ModelWrapper(LightningModule):
 
         # If latent space is used, compute metrics for the latent space.
         if self.model.vae is not None:
-            target_gt = rearrange(target_gt, "b v c h w -> (b v) c h w")
             loss_gt = self.model.vae.encode(target_gt)
-            loss_gt = rearrange(loss_gt, "(b v) c h w -> b v c h w", b=b)
             loss_pred = output_latent
         else:
             loss_gt = target_gt

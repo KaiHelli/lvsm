@@ -2,8 +2,8 @@
 
 defaults:
   - override /dataset: re10k
-  - override /loss: [mse, lpips]
-  - override /model/vae@lvsm_cfg.vae_cfg: null
+  - override /loss: [mse]
+  - override /model/vae@lvsm_cfg.vae_cfg: sd35
 
 wandb:
   name: re10k
@@ -11,18 +11,12 @@ wandb:
 
 data_loader:
   train:
-    batch_size: 4
+    batch_size: 64
 
 trainer:
   max_steps: 100_001
-  accumulate_grad_batches: 16
+  accumulate_grad_batches: 1
   log_every_n_steps: 1
-
-# lpips loss
-loss:
-  lpips:
-    apply_after_step: 0
-    weight: 0.5
 
 dataset: 
   image_shape: [192, 192]

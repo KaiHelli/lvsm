@@ -1,0 +1,5 @@
+hf_model_id: "stable-diffusion-v1-5/stable-diffusion-v1-5"
+hf_subfolder: "vae"
+hf_gated: false
+num_latent_channels: 4
+downsample_factor: 8

@@ -1,4 +1,6 @@
 hf_model_id: "stabilityai/stable-diffusion-3.5-large"
+hf_subfolder: "vae"
 hf_gated: true
 num_latent_channels: 16
 downsample_factor: 8
+num_slices_in_parallel: 4
