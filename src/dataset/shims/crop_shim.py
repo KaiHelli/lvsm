@@ -65,14 +65,19 @@ def rescale_and_crop(
     w_scaled = round(w_in * scale_factor)
     assert h_scaled == h_out or w_scaled == w_out
 
-    # Reshape the images to the correct size. Assume we don't have to worry about
-    # changing the intrinsics based on how the images are rounded.
-    *batch, c, h, w = images.shape
-    images = images.reshape(-1, c, h, w)
-    images = torch.stack([rescale(image, (h_scaled, w_scaled)) for image in images])
-    images = images.reshape(*batch, c, h_scaled, w_scaled)
+    if scale_factor != 1:
+        # Reshape the images to the correct size. Assume we don't have to worry about
+        # changing the intrinsics based on how the images are rounded.
+        *batch, c, h, w = images.shape
+        images = images.reshape(-1, c, h, w)
+        images = torch.stack([rescale(image, (h_scaled, w_scaled)) for image in images])
+        images = images.reshape(*batch, c, h_scaled, w_scaled)
 
-    return center_crop(images, intrinsics, shape)
+    if h_scaled != h_out or w_scaled != w_out:
+        # Center-crop the images.
+        images, intrinsics = center_crop(images, intrinsics, shape)
+
+    return images, intrinsics
 
 
 def apply_crop_shim_to_views(views: AnyViews, shape: tuple[int, int]) -> AnyViews:

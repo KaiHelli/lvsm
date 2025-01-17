@@ -48,6 +48,14 @@
             "args": []
         },
         {
+            "name": "Debug preprocess_dataset.py",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.scripts.preprocess_dataset",
+            "console": "integratedTerminal",
+            "args": []
+        },
+        {
             "name": "Python Debugger: Python File",
             "type": "debugpy",
             "request": "launch",

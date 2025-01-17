@@ -5,6 +5,10 @@ defaults:
   - override /loss: [mse]
   - override /model/vae@lvsm_cfg.vae_cfg: sd35
 
+lvsm_cfg:
+  transformer_cfg:
+    sdpa_kernel: torch-sdpa  # Due to bug after applying torch.compile on flex-attention
+
 wandb:
   name: re10k
   tags: [re10k, 192x192]
