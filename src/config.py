@@ -10,7 +10,7 @@ from .loss import LossCfgWrapper
 from .model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg
 from .model.transformer import TransformerCfg
 from .model.lvsm import LVSMCfg
-
+from .misc.random_generator import RandomGeneratorCfg 
 
 @dataclass
 class CheckpointingCfg:
@@ -43,6 +43,7 @@ class RootCfg:
     lvsm_cfg: LVSMCfg
     optimizer: OptimizerCfg
     checkpointing: CheckpointingCfg
+    random_generator: RandomGeneratorCfg
     trainer: TrainerCfg
     loss: list[LossCfgWrapper]
     test: TestCfg

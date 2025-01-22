@@ -78,3 +78,8 @@ trainer:
   log_every_n_steps: 1
 
 output_dir: null
+
+random_generator: 
+  max_num_context_views: 6
+  min_num_context_views: 2
+  context_views_sampler: uniform

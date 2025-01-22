@@ -24,6 +24,7 @@ from ..dataset import DatasetCfg
 from ..evaluation.metrics import compute_lpips, compute_psnr, compute_ssim
 from ..global_cfg import get_cfg
 from ..loss import get_losses, LossCfgWrapper
+from ..misc.random_generator import RandomGeneratorCfg, RandomGenerator
 from ..misc.benchmarker import Benchmarker
 from ..misc.image_io import prep_image, save_image, save_video
 from ..misc.LocalLogger import LOG_PATH, LocalLogger
@@ -101,6 +102,7 @@ class ModelWrapper(LightningModule):
     test_cfg: TestCfg
     train_cfg: TrainCfg
     step_tracker: StepTracker | None
+    random_generator_cfg: RandomGeneratorCfg
 
     def __init__(
         self,
@@ -108,6 +110,7 @@ class ModelWrapper(LightningModule):
         test_cfg: TestCfg,
         train_cfg: TrainCfg,
         model_cfg: LVSMCfg,
+        random_generator_cfg: RandomGeneratorCfg,
         loss_cfg: list[LossCfgWrapper],
         step_tracker: StepTracker | None,
     ) -> None:
@@ -121,6 +124,7 @@ class ModelWrapper(LightningModule):
         # Set up the model.
         self.model_cfg = model_cfg
         self.sdpa_kernel = model_cfg.transformer_cfg.sdpa_kernel
+        self.random_generator_cfg = random_generator_cfg
 
         # Track that the model is not configured yet.
         self.model_configured = False
@@ -149,6 +153,7 @@ class ModelWrapper(LightningModule):
 
         self.model = LVSM.from_cfg(self.model_cfg)
         self.data_shim = get_data_shim(self.model)
+        self.random_generator = RandomGenerator.from_cfg(self.random_generator_cfg)
 
         # Compile the model to achieve some speedup.
         # For now only compile if a GPU is available.
@@ -182,11 +187,22 @@ class ModelWrapper(LightningModule):
 
         batch: BatchedExample = self.data_shim(batch)
 
-        b, n_src, _, h, w = batch["context"]["image"].shape
+        b, _, _, h, w = batch["context"]["image"].shape
         _, n_tgt, _, _, _ = batch["target"]["image"].shape
         device = batch["target"]["image"].device
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
+
+        n_src = self.random_generator.generate()
+
+        # Select a subset of context images
+        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
+        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
+        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
+        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
+        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
+        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
+        batch["context"]["far"] = batch["context"]["far"][:, :n_src]
 
         # Get the right mask
         attn_mask = self.get_mask(
@@ -751,7 +767,6 @@ class ModelWrapper(LightningModule):
     @lru_cache
     @staticmethod
     def get_block_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
-        num_tkn_per_view = 16384
 
         num_src_tkn = num_src_views * num_tkn_per_view
 
