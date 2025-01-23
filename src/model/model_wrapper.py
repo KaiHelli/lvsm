@@ -193,7 +193,7 @@ class ModelWrapper(LightningModule):
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
-        n_src = self.random_generator.generate()
+        n_src = self.random_generator.generate(self.global_step)
 
         # Select a subset of context images
         batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]

@@ -82,4 +82,5 @@ output_dir: null
 random_generator: 
   max_num_context_views: 6
   min_num_context_views: 2
-  context_views_sampler: uniform
+  context_views_sampler: schedular
+  percentage_treshold: 50
