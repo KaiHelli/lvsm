@@ -84,3 +84,4 @@ random_generator:
   min_num_context_views: 2
   context_views_sampler: schedular
   percentage_treshold: 50
+  mean_num_context_views: 4

@@ -1,0 +1,15 @@
+d_model: 128
+d_k: 32
+d_v: 32
+num_heads: 4
+d_ff: 512
+dropout_p: 0.0
+num_encoder_layers: 4
+num_decoder_layers: 0
+bias: false
+activation: gelu
+pre_norm: true
+qk_norm: true
+qk_exp_seq_len: "${calc_exp_seq_len:${dataset.image_shape},${lvsm_cfg.patch_size},${dataset.view_sampler.mean_num_context_views},${dataset.view_sampler.num_target_views},${oc.select:lvsm_cfg.vae_cfg}}"
+sdpa_kernel: "torch-sdpa" # One of: ["flex-attention", "torch-sdpa", "naive", "auto"]
+
