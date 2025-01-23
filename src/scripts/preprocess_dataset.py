@@ -173,6 +173,14 @@ if __name__ == "__main__":
     for path in (f_tbar := tqdm(paths, position=0)):
         f_tbar.set_postfix(path=path)
 
+        output_path = DATASET_OUTPUT / path.relative_to(DATASET_INPUT)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Skip if file already exists
+        if output_path.exists():
+            print(f"\nSkipping {path} as {output_path} already exists.")
+            continue
+
         # Load the dataset
         dataset = torch.load(path)
 
@@ -185,7 +193,7 @@ if __name__ == "__main__":
             images, format, bad_images = bytes_to_image(scene["images"], expected_shape=expected_shape)
 
             if images is None:
-                print(f"\nAll images in {scene['key']} have unexpected shape. Skipping and removing scene.")
+                print(f"\n-- All images in {scene['key']} have unexpected shape. Skipping and removing scene.")
                 bad_scenes.append(i)
                 continue
 
@@ -193,7 +201,7 @@ if __name__ == "__main__":
                 mask = torch.ones(len(images), dtype=torch.bool)
                 mask[bad_images] = False
                 
-                print(f"\nRemoving {len(bad_images)} images with unexpected shape from {scene['key']}")
+                print(f"\n-- Removing {len(bad_images)} images with unexpected shape from {scene['key']}")
                 images = images[mask]
                 scene["timestamps"] = scene["timestamps"][mask]
                 scene["cameras"] = scene["cameras"][mask]
@@ -239,12 +247,10 @@ if __name__ == "__main__":
             mask = torch.ones(len(dataset), dtype=torch.bool)
             mask[bad_scenes] = False
 
-            print(f"\nRemoving {len(bad_scenes)} scenes with unexpected shape.")
+            print(f"\n# Removing {len(bad_scenes)} scene(s) with unexpected shape.")
             dataset = [scene for scene, keep in zip(dataset, mask) if keep]
 
         # Save the dataset
-        output_path = DATASET_OUTPUT / path.relative_to(DATASET_INPUT)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(dataset, output_path)
 
     # Finally copy over auxiliary files, excluding the .torch files
