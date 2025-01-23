@@ -196,13 +196,7 @@ class ModelWrapper(LightningModule):
         n_src = self.random_generator.generate(self.global_step)
 
         # Select a subset of context images
-        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
-        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
-        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
-        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
-        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
-        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
-        batch["context"]["far"] = batch["context"]["far"][:, :n_src]
+        self.subset_context(batch, n_src)
 
         # Get the right mask
         attn_mask = self.get_mask(
@@ -316,13 +310,7 @@ class ModelWrapper(LightningModule):
         n_src = self.random_generator.generate(self.global_step)
 
         # Select a subset of context images
-        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
-        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
-        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
-        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
-        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
-        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
-        batch["context"]["far"] = batch["context"]["far"][:, :n_src]
+        self.subset_context(batch, n_src)
 
         assert b == 1
 
@@ -431,13 +419,7 @@ class ModelWrapper(LightningModule):
         n_src = self.random_generator.generate(self.global_step)
 
         # Select a subset of context images
-        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
-        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
-        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
-        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
-        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
-        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
-        batch["context"]["far"] = batch["context"]["far"][:, :n_src]
+        self.subset_context(batch, n_src)
 
         assert b == 1
 
@@ -554,7 +536,10 @@ class ModelWrapper(LightningModule):
         # Two views are needed to get the wobble radius.
         _, v, _, _ = batch["context"]["extrinsics"].shape
         if v != 2:
-            return
+            n_src = 2
+
+            # Select a subset of context images
+            self.subset_context(batch, n_src)
 
         def trajectory_fn(t):
             origin_a = batch["context"]["extrinsics"][:, 0, :3, 3]
@@ -578,6 +563,11 @@ class ModelWrapper(LightningModule):
     def render_video_interpolation(self, batch: BatchedExample) -> None:
         _, v, _, _ = batch["context"]["extrinsics"].shape
 
+        n_src = 2
+
+        # Select a subset of context images
+        self.subset_context(batch, n_src)
+
         def trajectory_fn(t):
             extrinsics = interpolate_extrinsics(
                 batch["context"]["extrinsics"][0, 0],
@@ -598,7 +588,10 @@ class ModelWrapper(LightningModule):
         # Two views are needed to get the wobble radius.
         _, v, _, _ = batch["context"]["extrinsics"].shape
         if v != 2:
-            return
+            
+            n_src = 2
+            # Select a subset of context images
+            self.subset_context(batch, n_src)
 
         def trajectory_fn(t):
             origin_a = batch["context"]["extrinsics"][:, 0, :3, 3]
@@ -872,3 +865,14 @@ class ModelWrapper(LightningModule):
         Only use this function during training_step(), to log parameters during training.
         """
         return self.model(*args, **kwargs)
+
+    @staticmethod
+    def subset_context(batch : BatchedExample, n_src : int):
+    # Select a subset of context images
+        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
+        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
+        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
+        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
+        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
+        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
+        batch["context"]["far"] = batch["context"]["far"][:, :n_src]
