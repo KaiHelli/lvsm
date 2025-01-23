@@ -313,6 +313,17 @@ class ModelWrapper(LightningModule):
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
+        n_src = self.random_generator.generate(self.global_step)
+
+        # Select a subset of context images
+        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
+        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
+        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
+        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
+        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
+        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
+        batch["context"]["far"] = batch["context"]["far"][:, :n_src]
+
         assert b == 1
 
         # Get the right mask
@@ -416,6 +427,17 @@ class ModelWrapper(LightningModule):
         device = batch["target"]["image"].device
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
+
+        n_src = self.random_generator.generate(self.global_step)
+
+        # Select a subset of context images
+        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
+        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
+        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
+        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
+        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
+        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
+        batch["context"]["far"] = batch["context"]["far"][:, :n_src]
 
         assert b == 1
 
