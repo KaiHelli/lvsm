@@ -102,7 +102,7 @@ class ModelWrapper(LightningModule):
     test_cfg: TestCfg
     train_cfg: TrainCfg
     step_tracker: StepTracker | None
-    random_generator_cfg: RandomGeneratorCfg
+    random_generator_cfg: RandomGeneratorCfg | None
 
     def __init__(
         self,
@@ -110,7 +110,7 @@ class ModelWrapper(LightningModule):
         test_cfg: TestCfg,
         train_cfg: TrainCfg,
         model_cfg: LVSMCfg,
-        random_generator_cfg: RandomGeneratorCfg,
+        random_generator_cfg: RandomGeneratorCfg | None,
         loss_cfg: list[LossCfgWrapper],
         step_tracker: StepTracker | None,
     ) -> None:
@@ -153,7 +153,8 @@ class ModelWrapper(LightningModule):
 
         self.model = LVSM.from_cfg(self.model_cfg)
         self.data_shim = get_data_shim(self.model)
-        self.random_generator = RandomGenerator.from_cfg(self.random_generator_cfg)
+        if self.random_generator_cfg is not None:
+            self.random_generator = RandomGenerator.from_cfg(self.random_generator_cfg)
 
         # Compile the model to achieve some speedup.
         # For now only compile if a GPU is available.
@@ -193,10 +194,11 @@ class ModelWrapper(LightningModule):
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
-        n_src = self.random_generator.generate(self.global_step)
+        if self.random_generator_cfg is not None:
+            n_src = self.random_generator.generate(self.global_step)
 
-        # Select a subset of context images
-        self.subset_context(batch, n_src)
+            # Select a subset of context images
+            self.subset_context(batch, n_src)
 
         # Get the right mask
         attn_mask = self.get_mask(
@@ -307,10 +309,11 @@ class ModelWrapper(LightningModule):
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
-        n_src = self.random_generator.generate(self.global_step)
+        if self.random_generator_cfg is not None:
+            n_src = self.random_generator.generate(self.global_step)
 
-        # Select a subset of context images
-        self.subset_context(batch, n_src)
+            # Select a subset of context images
+            self.subset_context(batch, n_src)
 
         assert b == 1
 
@@ -416,10 +419,11 @@ class ModelWrapper(LightningModule):
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
-        n_src = self.random_generator.generate(self.global_step)
+        if self.random_generator_cfg is not None:
+            n_src = self.random_generator.generate(self.global_step)
 
-        # Select a subset of context images
-        self.subset_context(batch, n_src)
+            # Select a subset of context images
+            self.subset_context(batch, n_src)
 
         assert b == 1
 
