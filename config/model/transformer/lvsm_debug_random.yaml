@@ -10,6 +10,6 @@ bias: false
 activation: gelu
 pre_norm: true
 qk_norm: true
-qk_exp_seq_len: "${calc_exp_seq_len:${dataset.image_shape},${lvsm_cfg.patch_size},${mean_num_context_views},${dataset.view_sampler.num_target_views},${oc.select:lvsm_cfg.vae_cfg}}"
+qk_exp_seq_len: "${calc_exp_seq_len:${dataset.image_shape},${lvsm_cfg.patch_size},${random_generator.min_num_context_views},${dataset.view_sampler.num_target_views},${oc.select:lvsm_cfg.vae_cfg}}"
 sdpa_kernel: "torch-sdpa" # One of: ["flex-attention", "torch-sdpa", "naive", "auto"]
 

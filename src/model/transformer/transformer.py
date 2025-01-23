@@ -22,6 +22,7 @@ class TransformerCfg:
     qk_norm: bool
     qk_exp_seq_len: Optional[int]
     sdpa_kernel: Literal["flex-attention", "torch-sdpa", "naive", "auto"]
+    
 
 
 class Transformer(torch.nn.Module):
@@ -42,6 +43,7 @@ class Transformer(torch.nn.Module):
             qk_norm=cfg.qk_norm,
             qk_exp_seq_len=cfg.qk_exp_seq_len,
             sdpa_kernel=cfg.sdpa_kernel,
+            
         )
 
     def __init__(
@@ -61,6 +63,8 @@ class Transformer(torch.nn.Module):
         qk_norm=False,
         qk_exp_seq_len=None,
         sdpa_kernel="auto",
+        min_num_context_views = 2, 
+        max_num_context_views= 2,
     ):
         """
         Transformer model that can be used as encoder-decoder, encoder-only, or decoder-only.
@@ -100,6 +104,8 @@ class Transformer(torch.nn.Module):
                 qk_norm=qk_norm,
                 qk_exp_seq_len=qk_exp_seq_len,
                 sdpa_kernel=sdpa_kernel,
+                min_num_context_views = min_num_context_views,
+                max_num_context_views= max_num_context_views,
             )
         else:
             self.encoder = None
@@ -120,11 +126,13 @@ class Transformer(torch.nn.Module):
                 qk_norm=qk_norm,
                 qk_exp_seq_len=qk_exp_seq_len,
                 sdpa_kernel=sdpa_kernel,
+                min_num_context_views = min_num_context_views,
+                max_num_context_views= max_num_context_views,
             )
         else:
             self.decoder = None
 
-    def forward(self, src=None, tgt=None, *, src_mask=None, tgt_causal=True, tgt_sa_mask=None, tgt_ca_mask=None):
+    def forward(self, n_src, src=None, tgt=None, *, src_mask=None, tgt_causal=True, tgt_sa_mask=None, tgt_ca_mask=None):
         """
         Forward pass for the transformer model.
 
@@ -136,23 +144,23 @@ class Transformer(torch.nn.Module):
         """
         if self.encoder is not None and self.decoder is not None:
             assert src is not None and tgt is not None, "Transformer requires non-null input for src and tgt."
-            enc_output = self.encoder(src, attn_mask=src_mask)
+            enc_output = self.encoder(src, attn_mask=src_mask, n_src=n_src)
 
             dec_output = self.decoder(
-                tgt, enc_output, causal=tgt_causal, self_attn_mask=tgt_sa_mask, cross_attn_mask=tgt_ca_mask
+                tgt, enc_output, causal=tgt_causal, self_attn_mask=tgt_sa_mask, cross_attn_mask=tgt_ca_mask, n_src=n_src
             )
 
             return dec_output
         elif self.encoder is not None:
             assert src is not None, "Transformer requires non-null input for src."
 
-            enc_output = self.encoder(src, attn_mask=src_mask)
+            enc_output = self.encoder(src, attn_mask=src_mask, n_src=n_src)
 
             return enc_output
         elif self.decoder is not None:
             assert tgt is not None, "Transformer requires non-null input for tgt."
 
-            dec_output = self.decoder(tgt, None, causal=tgt_causal, self_attn_mask=tgt_sa_mask)
+            dec_output = self.decoder(tgt, None, causal=tgt_causal, self_attn_mask=tgt_sa_mask, n_src=n_src)
 
             return dec_output
 

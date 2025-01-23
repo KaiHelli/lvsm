@@ -18,8 +18,10 @@ class EncoderBlock(nn.Module):
         bias=True,
         pre_norm=False,
         qk_norm=False,
-        qk_exp_seq_len=False,
+        qk_exp_seq_len=None,
         sdpa_kernel="auto",
+        min_num_context_views = 2,
+         max_num_context_views=2,
     ):
         """
         Encoder block for the Transformer model.
@@ -54,6 +56,8 @@ class EncoderBlock(nn.Module):
             qk_norm=qk_norm,
             qk_exp_seq_len=qk_exp_seq_len,
             sdpa_kernel=sdpa_kernel,
+            min_num_context_views = min_num_context_views,
+            max_num_context_views= max_num_context_views,     
         )
 
         # Feedforward layer
@@ -86,14 +90,14 @@ class EncoderBlock(nn.Module):
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x, n_src, attn_mask=None):
         """
         Forward pass of the encoder block.
         """
         if self.pre_norm:
             # Pre-Layer Normalization variant
             # Layer normalization before attention and feedforward
-            attn = self.self_attn(self.norm1(x), causal=False, attn_mask=attn_mask)
+            attn = self.self_attn(n_src, self.norm1(x), causal=False, attn_mask=attn_mask)
             x = x + self.dropout(attn)
 
             ff = self.mlp(self.norm2(x))
@@ -101,7 +105,7 @@ class EncoderBlock(nn.Module):
         else:
             # Post-Layer Normalization variant (original)
             # Self-attention
-            attn = self.self_attn(x, causal=False, attn_mask=attn_mask)
+            attn = self.self_attn(x, causal=False,n_src=n_src, attn_mask=attn_mask)
             x = self.norm1(x + self.dropout(attn))
 
             # Feedforward
@@ -124,12 +128,12 @@ class TransformerEncoder(nn.Module):
         # Layer normalization for the final output
         self.norm = LayerNorm(d_model, bias=bias)
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x, n_src, attn_mask=None):
         """
         Forward pass of the transformer encoder.
         """
         for layer in self.layers:
-            x = layer(x, attn_mask=attn_mask)
+            x = layer(x,n_src=n_src, attn_mask=attn_mask)
 
         # Final layer normalization
         x = self.norm(x)

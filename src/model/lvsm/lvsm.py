@@ -119,6 +119,7 @@ class LVSM(torch.nn.Module):
         self.norm_out = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
 
     def forward(self, src_img, src_rays, tgt_rays, attn_mask):
+        _, n_src, _, _, _ = src_img.shape
         # If a VAE is used, encode the source image and downsample the rays
         if self.vae is not None:
             b = src_img.shape[0]
@@ -161,7 +162,7 @@ class LVSM(torch.nn.Module):
         num_src_tokens = tkn_src.shape[1]
         # total_tokens = tkn_in.shape[1]
 
-        tkn_out = self.transformer(src=tkn_in, src_mask=attn_mask)
+        tkn_out = self.transformer(src=tkn_in, src_mask=attn_mask, n_src=n_src)
 
         # Separate the target tokens from the source tokens
         tkn_tgt_out = tkn_out[:, num_src_tokens:]

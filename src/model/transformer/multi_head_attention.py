@@ -37,6 +37,8 @@ class MultiHeadAttention(torch.nn.Module):
         qk_norm=False,
         qk_exp_seq_len=None,
         sdpa_kernel="auto",
+        min_num_context_views = 2,
+        max_num_context_views=2,
     ):
         """
         Multi-head attention mechanism.
@@ -64,7 +66,8 @@ class MultiHeadAttention(torch.nn.Module):
         self.cross_attn = cross_attn
         self.bias = bias
         self.qk_norm = qk_norm
-
+        self.min_num_context_views = min_num_context_views
+        self.max_num_context_views= max_num_context_views
         self.sdpa_kernel = sdpa_kernel
 
         assert sdpa_kernel in ("flex-attention", "torch-sdpa", "naive", "auto"), "Invalid SDPA kernel."
@@ -85,7 +88,7 @@ class MultiHeadAttention(torch.nn.Module):
             ), "To initialize QK normalization the expected sequence length is required. "
             qk_exp_seq_len = torch.tensor(float(qk_exp_seq_len))
             qk_init_scale = torch.log2(torch.pow(qk_exp_seq_len, 2) - qk_exp_seq_len)
-            self.qk_scale = QKNorm(num_heads=self.num_heads, scale=qk_init_scale)
+            self.qk_scale = QKNorm(num_heads=self.num_heads, scale=qk_init_scale, min_num_context_views=self.min_num_context_views,  max_num_context_views= max_num_context_views)
             self.mha_scale = 1.0
         else:
             self.qk_scale = Identity()
@@ -142,6 +145,7 @@ class MultiHeadAttention(torch.nn.Module):
 
     def forward(
         self,
+        n_src : int, 
         x: torch.Tensor,
         x_kv: Optional[torch.Tensor] = None,
         causal: bool = False,
@@ -159,13 +163,14 @@ class MultiHeadAttention(torch.nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, seq_length, d_model).
         """
         qkv, q, kv = self.compute_q_kv(x, x_kv)
-        attention_head_outputs = self.compute_attention_heads(qkv=qkv, q=q, kv=kv, causal=causal, attn_mask=attn_mask)
+        attention_head_outputs = self.compute_attention_heads(qkv=qkv, q=q, kv=kv, causal=causal, attn_mask=attn_mask, n_src=n_src)
         output = self.o_proj(attention_head_outputs)
 
         return output
 
     def compute_attention_heads(
         self,
+        n_src : int, 
         qkv: Optional[torch.Tensor] = None,
         q: Optional[torch.Tensor] = None,
         kv: Optional[torch.Tensor] = None,
@@ -193,7 +198,7 @@ class MultiHeadAttention(torch.nn.Module):
             raise ValueError("Invalid inputs for attention computation.")
 
         # Apply QK-Norm if set, otherwise this applies the identity.
-        q, k = self.qk_scale(q, k)
+        q, k = self.qk_scale(q, k, n_src)
 
         if self.sdpa_kernel == "flex-attention":
             assert attn_mask is None or isinstance(

@@ -67,36 +67,43 @@ class QKNorm(torch.nn.Module):
     }
     """
 
-    def __init__(self, num_heads, scale):
+    def __init__(self, num_heads, scale, min_num_context_views = 2,  max_num_context_views=2):
         super(QKNorm, self).__init__()
+        self.qk_scaling = QKScaleUp(num_heads, scale, min_num_context_views,  max_num_context_views)
 
-        self.qk_scaling = QKScaleUp(num_heads, scale)
-
-    def forward(self, q, k):
+    def forward(self, q, k, n_src):
         q = torch.nn.functional.normalize(q, p=2, dim=-1)
         k = torch.nn.functional.normalize(k, p=2, dim=-1)
 
         # In the paper we do: (g * (QK^T)) * V
         # We do ((gQ)*K^T)*V due to
-        q = self.qk_scaling(q)
+        q = self.qk_scaling(q, n_src)
 
         return q, k
 
 
 class QKScaleUp(torch.nn.Module):
-    """
-    Learned pararmeter used to scale up QK^T before taking the softmax.
-
-    See: https://github.com/CyndxAI/QKNorm/blob/c628cb5d21f1475ba95db779a175748ff9efe940/QKNorm/layers.py#L8C1-L16C30
-    """
-
-    def __init__(self, num_heads, scale):
+    def __init__(self, num_heads, scale, min_num_context_views=2, max_num_context_views=2):
         super(QKScaleUp, self).__init__()
 
         self.num_heads = num_heads
+        self.scale = []  # Store scale values for each context view
+        self.scale.append(scale)
+        # Calculate and append log2(L^2 - L) for each context view L
+        for L in range(min_num_context_views+1, max_num_context_views + 1):
+            self.scale.append(torch.log2(L**2 - L))
+
+        # Convert scale to a torch tensor for easier indexing during forward pass
+        self.scale = torch.tensor(self.scale, dtype=torch.float32)
+
+        self.min_num_context_views = min_num_context_views
         self.weight = torch.nn.Parameter(torch.tensor([float(scale)] * num_heads))
 
-    def forward(self, x):
+    def forward(self, x, num_context_views):
         assert x.shape[2] == self.num_heads, "Shape mismatch in head dimension."
 
-        return x * self.weight[None, None, :, None]
+        # Index the scale corresponding to the number of context views
+        scale_idx = num_context_views - self.min_num_context_views
+
+        # Scale the input using the corresponding scale factor
+        return x * self.weight[None, None, :, None] * self.scale[scale_idx] / self.scale[0]

@@ -1,5 +1,5 @@
 defaults:
-  - transformer@transformer_cfg: lvsm_small
+  - transformer@transformer_cfg: lvsm_debug_random
   - vae@vae_cfg: null
 
 patch_size: 8

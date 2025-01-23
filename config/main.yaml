@@ -80,8 +80,8 @@ trainer:
 output_dir: null
 
 random_generator: 
-  max_num_context_views: 6
-  min_num_context_views: 2
+  max_num_context_views: &shared_max_num_context_views 6
+  min_num_context_views: &shared_min_num_context_views 2
   context_views_sampler: schedular
-  percentage_treshold: 50
-  mean_num_context_views: 4
+  percentage_threshold: 50
+  warmup_steps: 10000
