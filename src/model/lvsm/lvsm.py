@@ -118,23 +118,25 @@ class LVSM(torch.nn.Module):
         self.norm_in = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
         self.norm_out = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
 
-    def forward(self, src_img, src_rays, tgt_rays, attn_mask):
-        _, n_src, _, _, _ = src_img.shape
+    def forward(self, src_img, src_rays, tgt_rays, attn_mask, vae_latents=None):
         # If a VAE is used, encode the source image and downsample the rays
         if self.vae is not None:
-            b = src_img.shape[0]
-            # Reshape the source image to match the expected input shape
-            src_rays, tgt_rays = [rearrange(x, f"b n c h w -> (b n) c h w") for x in [src_rays, tgt_rays]]
+            if vae_latents is not None:
+                self.vae.sample(vae_latents["mean"], vae_latents["std"])
+            else:
+                b = src_img.shape[0]
+                # Reshape the source image to match the expected input shape
+                src_rays, tgt_rays = [rearrange(x, f"b n c h w -> (b n) c h w") for x in [src_rays, tgt_rays]]
 
-            # Encode source image
-            src_img = self.vae.encode(src_img)
-            # Downsample source rays
-            src_rays = self.downsample_rays(src_rays)
-            # Downsample target rays
-            tgt_rays = self.downsample_rays(tgt_rays)
+                # Encode source image
+                src_img = self.vae.encode(src_img)
+                # Downsample source rays
+                src_rays = self.downsample_rays(src_rays)
+                # Downsample target rays
+                tgt_rays = self.downsample_rays(tgt_rays)
 
-            # Reshape the source image back to the original shape
-            src_rays, tgt_rays = [rearrange(x, f"(b n) c h w -> b n c h w", b=b) for x in [src_rays, tgt_rays]]
+                # Reshape the source image back to the original shape
+                src_rays, tgt_rays = [rearrange(x, f"(b n) c h w -> b n c h w", b=b) for x in [src_rays, tgt_rays]]
 
         # Tokenize input images and rays
         tkn_src = self.tokenize_input(torch.cat([src_img, src_rays], dim=-3))
@@ -162,7 +164,7 @@ class LVSM(torch.nn.Module):
         num_src_tokens = tkn_src.shape[1]
         # total_tokens = tkn_in.shape[1]
 
-        tkn_out = self.transformer(src=tkn_in, src_mask=attn_mask, n_src=n_src)
+        tkn_out = self.transformer(src=tkn_in, src_mask=attn_mask)
 
         # Separate the target tokens from the source tokens
         tkn_tgt_out = tkn_out[:, num_src_tokens:]

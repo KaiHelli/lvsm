@@ -4,6 +4,7 @@ defaults:
   - override /dataset: re10k
   - override /loss: [mse, lpips]
   - override /model/vae@lvsm_cfg.vae_cfg: null
+  - override /dataset/view_sampler: boundedv2
 
 wandb:
   name: re10k
@@ -31,6 +32,12 @@ dataset:
   far: 100.
   baseline_scale_bounds: false
   make_baseline_1: false
+  sort_target_index: true
+  sort_context_index: true 
+  view_sampler:
+    target_views_replace_sample: false
+    num_context_views: 2
+
 
 test:
   eval_time_skip_steps: 5

@@ -24,7 +24,6 @@ from ..dataset import DatasetCfg
 from ..evaluation.metrics import compute_lpips, compute_psnr, compute_ssim
 from ..global_cfg import get_cfg
 from ..loss import get_losses, LossCfgWrapper
-from ..misc.random_generator import RandomGeneratorCfg, RandomGenerator
 from ..misc.benchmarker import Benchmarker
 from ..misc.image_io import prep_image, save_image, save_video
 from ..misc.LocalLogger import LOG_PATH, LocalLogger
@@ -102,7 +101,6 @@ class ModelWrapper(LightningModule):
     test_cfg: TestCfg
     train_cfg: TrainCfg
     step_tracker: StepTracker | None
-    random_generator_cfg: RandomGeneratorCfg | None
 
     def __init__(
         self,
@@ -110,7 +108,6 @@ class ModelWrapper(LightningModule):
         test_cfg: TestCfg,
         train_cfg: TrainCfg,
         model_cfg: LVSMCfg,
-        random_generator_cfg: RandomGeneratorCfg | None,
         loss_cfg: list[LossCfgWrapper],
         step_tracker: StepTracker | None,
     ) -> None:
@@ -124,7 +121,6 @@ class ModelWrapper(LightningModule):
         # Set up the model.
         self.model_cfg = model_cfg
         self.sdpa_kernel = model_cfg.transformer_cfg.sdpa_kernel
-        self.random_generator_cfg = random_generator_cfg
 
         # Track that the model is not configured yet.
         self.model_configured = False
@@ -153,8 +149,6 @@ class ModelWrapper(LightningModule):
 
         self.model = LVSM.from_cfg(self.model_cfg)
         self.data_shim = get_data_shim(self.model)
-        if self.random_generator_cfg is not None:
-            self.random_generator = RandomGenerator.from_cfg(self.random_generator_cfg)
 
         # Compile the model to achieve some speedup.
         # For now only compile if a GPU is available.
@@ -188,17 +182,11 @@ class ModelWrapper(LightningModule):
 
         batch: BatchedExample = self.data_shim(batch)
 
-        b, _, _, h, w = batch["context"]["image"].shape
+        b, n_src, _, h, w = batch["context"]["image"].shape
         _, n_tgt, _, _, _ = batch["target"]["image"].shape
         device = batch["target"]["image"].device
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
-
-        if self.random_generator_cfg is not None:
-            n_src = self.random_generator.generate(self.global_step)
-
-            # Select a subset of context images
-            self.subset_context(batch, n_src)
 
         # Get the right mask
         attn_mask = self.get_mask(
@@ -207,7 +195,7 @@ class ModelWrapper(LightningModule):
 
         # Run the model.
         output, output_latent = self(
-            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
+            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask, batch["context"].get("vae_latents", None)
         )
 
         target_gt = batch["target"]["image"]
@@ -221,7 +209,11 @@ class ModelWrapper(LightningModule):
 
         # If latent space is used, compute metrics for the latent space.
         if self.model.vae is not None:
-            loss_gt = self.model.vae.encode(target_gt)
+            vae_latents = batch["target"].get("vae_latents", False)
+            if vae_latents:
+                loss_gt = self.model.vae.sample(vae_latents["mean"], vae_latents["std"])
+            else:
+                loss_gt = self.model.vae.encode(target_gt)
 
             loss_pred = output_latent
         else:
@@ -309,12 +301,6 @@ class ModelWrapper(LightningModule):
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
-        if self.random_generator_cfg is not None:
-            n_src = self.random_generator.generate(self.global_step)
-
-            # Select a subset of context images
-            self.subset_context(batch, n_src)
-
         assert b == 1
 
         # Get the right mask
@@ -325,7 +311,7 @@ class ModelWrapper(LightningModule):
         # Run the model.
         with self.benchmarker.time("model"):
             output, _ = self.model(
-                batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
+                batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask, batch["context"].get("vae_latents", None)
             )
 
         # Type the output.
@@ -419,12 +405,6 @@ class ModelWrapper(LightningModule):
 
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
-        if self.random_generator_cfg is not None:
-            n_src = self.random_generator.generate(self.global_step)
-
-            # Select a subset of context images
-            self.subset_context(batch, n_src)
-
         assert b == 1
 
         # Get the right mask
@@ -434,14 +414,19 @@ class ModelWrapper(LightningModule):
 
         # Run the model.
         output, output_latent = self.model(
-            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask
+            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask, batch["context"].get("vae_latents", None)
         )
 
         target_gt = batch["target"]["image"]
 
         # If latent space is used, compute metrics for the latent space.
         if self.model.vae is not None:
-            loss_gt = self.model.vae.encode(target_gt)
+            vae_latents = batch["target"].get("vae_latents", False)
+            if vae_latents:
+                loss_gt = self.model.vae.sample(vae_latents["mean"], vae_latents["std"])
+            else:
+                loss_gt = self.model.vae.encode(target_gt)
+            
             loss_pred = output_latent
         else:
             loss_gt = target_gt
@@ -539,15 +524,10 @@ class ModelWrapper(LightningModule):
     def render_video_wobble(self, batch: BatchedExample) -> None:
         # Two views are needed to get the wobble radius.
         _, v, _, _ = batch["context"]["extrinsics"].shape
-        if v != 2:
-            n_src = 2
-
-            # Select a subset of context images
-            self.subset_context(batch, n_src)
 
         def trajectory_fn(t):
             origin_a = batch["context"]["extrinsics"][:, 0, :3, 3]
-            origin_b = batch["context"]["extrinsics"][:, 1, :3, 3]
+            origin_b = batch["context"]["extrinsics"][:, -1, :3, 3]
             delta = (origin_a - origin_b).norm(dim=-1)
             extrinsics = generate_wobble(
                 batch["context"]["extrinsics"][:, 0],
@@ -567,20 +547,15 @@ class ModelWrapper(LightningModule):
     def render_video_interpolation(self, batch: BatchedExample) -> None:
         _, v, _, _ = batch["context"]["extrinsics"].shape
 
-        n_src = 2
-
-        # Select a subset of context images
-        self.subset_context(batch, n_src)
-
         def trajectory_fn(t):
             extrinsics = interpolate_extrinsics(
                 batch["context"]["extrinsics"][0, 0],
-                (batch["context"]["extrinsics"][0, 1] if v == 2 else batch["target"]["extrinsics"][0, 0]),
+                (batch["context"]["extrinsics"][0, -1]),
                 t,
             )
             intrinsics = interpolate_intrinsics(
                 batch["context"]["intrinsics"][0, 0],
-                (batch["context"]["intrinsics"][0, 1] if v == 2 else batch["target"]["intrinsics"][0, 0]),
+                (batch["context"]["intrinsics"][0, -1]),
                 t,
             )
             return extrinsics[None], intrinsics[None]
@@ -591,15 +566,10 @@ class ModelWrapper(LightningModule):
     def render_video_interpolation_exaggerated(self, batch: BatchedExample) -> None:
         # Two views are needed to get the wobble radius.
         _, v, _, _ = batch["context"]["extrinsics"].shape
-        if v != 2:
-            
-            n_src = 2
-            # Select a subset of context images
-            self.subset_context(batch, n_src)
 
         def trajectory_fn(t):
             origin_a = batch["context"]["extrinsics"][:, 0, :3, 3]
-            origin_b = batch["context"]["extrinsics"][:, 1, :3, 3]
+            origin_b = batch["context"]["extrinsics"][:, -1, :3, 3]
             delta = (origin_a - origin_b).norm(dim=-1)
             tf = generate_wobble_transformation(
                 delta * 0.5,
@@ -609,12 +579,12 @@ class ModelWrapper(LightningModule):
             )
             extrinsics = interpolate_extrinsics(
                 batch["context"]["extrinsics"][0, 0],
-                (batch["context"]["extrinsics"][0, 1] if v == 2 else batch["target"]["extrinsics"][0, 0]),
+                (batch["context"]["extrinsics"][0, -1]),
                 t * 5 - 2,
             )
             intrinsics = interpolate_intrinsics(
                 batch["context"]["intrinsics"][0, 0],
-                (batch["context"]["intrinsics"][0, 1] if v == 2 else batch["target"]["intrinsics"][0, 0]),
+                (batch["context"]["intrinsics"][0, -1]),
                 t * 5 - 2,
             )
             return extrinsics @ tf, intrinsics[None]
@@ -645,7 +615,7 @@ class ModelWrapper(LightningModule):
         assert b == 1, "For now only a batch size of 1 is supported."
         assert (
             num_frames % n_tgt == 0
-        ), "For now we need to have the number of frames being divisible by the number of context views."
+        ), "For now we need to have the number of frames being divisible by the number of target views."
 
         with torch.amp.autocast("cuda" if tensor_on_gpu(batch["context"]["image"]) else "cpu", enabled=False):
             t = torch.linspace(0, 1, num_frames, dtype=torch.float32, device=self.device)
@@ -673,7 +643,7 @@ class ModelWrapper(LightningModule):
         for i in range(num_frame_batches):
             # Run the model batch-wise.
             output, _ = self.model(
-                batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays_batched[:, i], attn_mask
+                batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays_batched[:, i], attn_mask, batch["context"].get("vae_latents", None)
             )
             outputs.append(output)
 
@@ -786,7 +756,6 @@ class ModelWrapper(LightningModule):
     @lru_cache
     @staticmethod
     def get_block_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
-
         num_src_tkn = num_src_views * num_tkn_per_view
 
         total_views = num_src_views + num_tgt_views
@@ -869,14 +838,3 @@ class ModelWrapper(LightningModule):
         Only use this function during training_step(), to log parameters during training.
         """
         return self.model(*args, **kwargs)
-
-    @staticmethod
-    def subset_context(batch : BatchedExample, n_src : int):
-    # Select a subset of context images
-        batch["context"]["image"] = batch["context"]["image"][:, :n_src, :, :, :]
-        batch["context"]["plucker_rays"] = batch["context"]["plucker_rays"][:, :n_src, :, :]
-        batch["context"]["intrinsics"] = batch["context"]["intrinsics"][:, :n_src, :, :]
-        batch["context"]["extrinsics"] = batch["context"]["extrinsics"][:, :n_src, :, :]
-        batch["context"]["index"] = batch["context"]["index"][:, :n_src]
-        batch["context"]["near"] = batch["context"]["near"][:, :n_src]
-        batch["context"]["far"] = batch["context"]["far"][:, :n_src]

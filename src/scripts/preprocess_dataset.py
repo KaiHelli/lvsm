@@ -25,7 +25,9 @@ parser.add_argument("--target_height", type=int, help="length of height to reduc
 parser.add_argument("--target_width", type=int, help="length of width to reduce to", default=192)
 
 parser.add_argument("--vae_encode", type=bool, help="whether to preencode resized images using vae", default=True)
-parser.add_argument("--vae_hf_model_id", type=str, help="huggingface id to vae model", default="stabilityai/stable-diffusion-3.5-large")
+parser.add_argument(
+    "--vae_hf_model_id", type=str, help="huggingface id to vae model", default="stabilityai/stable-diffusion-3.5-large"
+)
 parser.add_argument("--vae_hf_subfolder", type=str, help="huggingface id to vae model", default="vae")
 parser.add_argument("--vae_hf_gated", type=bool, help="whether the vae model is gated", default=True)
 parser.add_argument("--vae_num_latent_channels", type=int, help="number of latent channels in vae model", default=16)
@@ -37,6 +39,7 @@ args = parser.parse_args()
 DATASET_INPUT = Path(args.dataset_input)
 DATASET_OUTPUT = Path(args.dataset_output)
 
+
 def convert_images(
     self,
     images: list[UInt8[Tensor, "..."]],
@@ -46,6 +49,7 @@ def convert_images(
         image = Image.open(BytesIO(image.numpy().tobytes()))
         torch_images.append(self.to_tensor(image))
     return torch.stack(torch_images)
+
 
 def bytes_to_image(
     images: list[UInt8[Tensor, "..."]],
@@ -85,6 +89,7 @@ def bytes_to_image(
 
     return images_out, format, bad_images
 
+
 def image_to_bytes(images: list[UInt8[Tensor, "..."]], format: str) -> list[UInt8[Tensor, "..."]]:
     images_out = []
     to_pil_image = tf.ToPILImage()
@@ -100,6 +105,7 @@ def image_to_bytes(images: list[UInt8[Tensor, "..."]], format: str) -> list[UInt
         images_out.append(image_bytes)
 
     return images_out
+
 
 def pose_to_intrinsics(
     poses: Float[Tensor, "batch 18"],
@@ -117,6 +123,7 @@ def pose_to_intrinsics(
 
     return intrinsics
 
+
 def update_pose_intrinsics(
     poses: Float[Tensor, "batch 18"],
     intrinsics: Float[Tensor, "batch 3 3"],
@@ -128,8 +135,9 @@ def update_pose_intrinsics(
     poses[:, 1] = intrinsics[:, 1, 1]  # fy
     poses[:, 2] = intrinsics[:, 0, 2]  # cx
     poses[:, 3] = intrinsics[:, 1, 2]  # cy
-    
+
     return poses
+
 
 if __name__ == "__main__":
     # Create the output directory
@@ -146,7 +154,7 @@ if __name__ == "__main__":
             # Update the expected shape
             metadata["expected_shape"] = [num_channels, args.target_height, args.target_width]
             print(f"Updated expected shape: {metadata['expected_shape']}")
-        
+
         if args.vae_encode:
             metadata["vae_encoded"] = True
             metadata["vae_hf_model_id"] = args.vae_hf_model_id
@@ -166,7 +174,13 @@ if __name__ == "__main__":
     if args.vae_encode:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # Load the VAE model
-        vae = VAE(args.vae_hf_model_id, args.vae_hf_subfolder, hf_gated=args.vae_hf_gated, num_latent_channels=args.vae_num_latent_channels, downsample_factor=args.vae_downsample_factor)
+        vae = VAE(
+            args.vae_hf_model_id,
+            args.vae_hf_subfolder,
+            hf_gated=args.vae_hf_gated,
+            num_latent_channels=args.vae_num_latent_channels,
+            downsample_factor=args.vae_downsample_factor,
+        )
         vae = vae.to(device)
         vae.eval()
 
@@ -200,7 +214,7 @@ if __name__ == "__main__":
             if bad_images:
                 mask = torch.ones(len(images), dtype=torch.bool)
                 mask[bad_images] = False
-                
+
                 print(f"\n-- Removing {len(bad_images)} images with unexpected shape from {scene['key']}")
                 images = images[mask]
                 scene["timestamps"] = scene["timestamps"][mask]
@@ -211,7 +225,10 @@ if __name__ == "__main__":
             if args.resize:
                 images, intrinsics = rescale_and_crop(images, intrinsics, (args.target_height, args.target_width))
 
-                assert images.shape[2:] == (args.target_height, args.target_width), "Images have unexpected shape after resizing."
+                assert images.shape[2:] == (
+                    args.target_height,
+                    args.target_width,
+                ), "Images have unexpected shape after resizing."
 
             if args.vae_encode:
                 # Encode the images using the VAE
@@ -225,10 +242,10 @@ if __name__ == "__main__":
                 # Encode each slice
                 means = []
                 stds = []
-                with (torch.no_grad(), torch.autocast(device_type=device)):
+                with torch.no_grad(), torch.autocast(device_type=device):
                     for slice in slices:
                         mean, std = vae.encode(slice, sample=False)
-                    
+
                     means.append(mean)
                     stds.append(std)
 

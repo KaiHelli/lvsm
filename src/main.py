@@ -128,7 +128,6 @@ def train(cfg_dict: DictConfig):
         "model_cfg": cfg.lvsm_cfg,
         "loss_cfg": cfg.loss,
         "step_tracker": step_tracker,
-        "random_generator_cfg": cfg.random_generator,
     }
     if cfg.mode == "train" and checkpoint_path is not None and not cfg.checkpointing.resume:
         # Just load model weights, without optimizer states
@@ -136,7 +135,7 @@ def train(cfg_dict: DictConfig):
         model_wrapper = ModelWrapper.load_from_checkpoint(checkpoint_path, **model_kwargs, strict=True)
         print(cyan(f"Loaded weigths from {checkpoint_path}."))
     else:
-         model_wrapper = ModelWrapper(**model_kwargs)
+        model_wrapper = ModelWrapper(**model_kwargs)
 
     data_module = DataModule(
         cfg.dataset,

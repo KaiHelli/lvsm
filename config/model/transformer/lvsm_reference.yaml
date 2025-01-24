@@ -9,6 +9,7 @@ num_decoder_layers: 0
 bias: false
 activation: gelu
 pre_norm: true
-qk_norm: true
-qk_exp_seq_len: "${calc_exp_seq_len:${dataset.image_shape},${lvsm_cfg.patch_size},${dataset.view_sampler.num_context_views},${dataset.view_sampler.num_target_views},${oc.select:lvsm_cfg.vae_cfg}}"
+qk_norm: 2   # One of: [0, 1, 2] in which 0 = no norm, 1 = QKNorm, 2 = QKNormV2
+# In case of QKNorm, the following parameter needs to be set:
+# qk_exp_seq_len: "${calc_exp_seq_len:${dataset.image_shape},${lvsm_cfg.patch_size},${random_generator.min_num_context_views},${dataset.view_sampler.num_target_views},${oc.select:lvsm_cfg.vae_cfg}}"
 sdpa_kernel: "flex-attention" # One of: ["flex-attention", "torch-sdpa", "naive", "auto"]

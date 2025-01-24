@@ -1,12 +1,14 @@
 import random
 from dataclasses import dataclass
-from typing import Callable, List, Any
+from typing import Callable, List, Any, Optional, Union
 
 import numpy as np
 import torch
 from pytorch_lightning import LightningDataModule
 from torch import Generator, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, default_collate
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data._utils.collate import collate, default_collate_fn_map
 
 from ..misc.step_tracker import StepTracker
 from . import DatasetCfg, get_dataset
@@ -47,11 +49,6 @@ class DataLoaderStageCfg:
     seed: int | None
 
 
-# @dataclass
-# class DataLoaderShimCfg:
-#    calculate_rays: bool
-
-
 @dataclass
 class DataLoaderCfg:
     train: DataLoaderStageCfg
@@ -88,7 +85,20 @@ class DataModule(LightningDataModule):
         self.step_tracker = step_tracker
         self.dataset_shim = dataset_shim
         self.global_rank = global_rank
-        self.collate_fn = None
+
+    @staticmethod
+    def collate_fn(batch: List[Any]) -> Any:
+        
+        def collate_tensor_fn(
+            batch,
+            *,
+            collate_fn_map: Optional[dict[Union[type, tuple[type, ...]], Callable]] = None,):
+            # TODO: Padding should then also be reflected in mask.
+            return pad_sequence(batch, batch_first=True)
+        
+        default_collate_fn_map[torch.Tensor] = collate_tensor_fn
+
+        return collate(batch, collate_fn_map=default_collate_fn_map)
 
     def get_persistent(self, loader_cfg: DataLoaderStageCfg) -> bool | None:
         return None if loader_cfg.num_workers == 0 else loader_cfg.persistent_workers
@@ -108,7 +118,7 @@ class DataModule(LightningDataModule):
             self.data_loader_cfg.train.batch_size,
             shuffle=not isinstance(dataset, IterableDataset),
             num_workers=self.data_loader_cfg.train.num_workers,
-            collate_fn=self.collate_fn,
+            collate_fn=DataModule.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.train),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.train),
@@ -121,7 +131,7 @@ class DataModule(LightningDataModule):
             ValidationWrapper(dataset, 1),
             self.data_loader_cfg.val.batch_size,
             num_workers=self.data_loader_cfg.val.num_workers,
-            collate_fn=self.collate_fn,
+            collate_fn=DataModule.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.val),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.val),
@@ -138,7 +148,7 @@ class DataModule(LightningDataModule):
             dataset,
             self.data_loader_cfg.test.batch_size,
             num_workers=self.data_loader_cfg.test.num_workers,
-            collate_fn=self.collate_fn,
+            collate_fn=DataModule.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.test),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.test),

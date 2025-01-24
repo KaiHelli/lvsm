@@ -7,17 +7,24 @@ from .view_sampler_all import ViewSamplerAll, ViewSamplerAllCfg
 from .view_sampler_arbitrary import ViewSamplerArbitrary, ViewSamplerArbitraryCfg
 from .view_sampler_bounded import ViewSamplerBounded, ViewSamplerBoundedCfg
 from .view_sampler_evaluation import ViewSamplerEvaluation, ViewSamplerEvaluationCfg
-from .view_sampler_random import ViewSamplerRandom, ViewSamplerRandomCfg
+from .view_sampler_bounded_v2 import ViewSamplerBoundedV2, ViewSamplerBoundedV2Cfg
+
 
 VIEW_SAMPLERS: dict[str, ViewSampler[Any]] = {
     "all": ViewSamplerAll,
     "arbitrary": ViewSamplerArbitrary,
     "bounded": ViewSamplerBounded,
     "evaluation": ViewSamplerEvaluation,
-    "random": ViewSamplerRandom,
+    "boundedv2": ViewSamplerBoundedV2,
 }
 
-ViewSamplerCfg = ViewSamplerArbitraryCfg | ViewSamplerBoundedCfg | ViewSamplerEvaluationCfg | ViewSamplerAllCfg | ViewSamplerRandomCfg
+ViewSamplerCfg = (
+    ViewSamplerArbitraryCfg
+    | ViewSamplerBoundedCfg
+    | ViewSamplerEvaluationCfg
+    | ViewSamplerAllCfg
+    | ViewSamplerBoundedV2Cfg
+)
 
 
 def get_view_sampler(

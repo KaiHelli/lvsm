@@ -12,6 +12,7 @@ from jaxtyping import Float, UInt8
 from PIL import Image
 from torch import Tensor
 from torch.utils.data import IterableDataset
+from typing import Optional
 
 from ..geometry.projection import get_fov
 from .dataset import DatasetCfgCommon
@@ -37,7 +38,8 @@ class DatasetRE10kCfg(DatasetCfgCommon):
     far: float = -1.0
     baseline_scale_bounds: bool = True
     shuffle_val: bool = True
-
+    sort_context_index: Optional[bool] = False
+    sort_target_index: Optional[bool] = False
 
 class DatasetRE10k(IterableDataset):
     cfg: DatasetRE10kCfg
@@ -68,6 +70,8 @@ class DatasetRE10k(IterableDataset):
 
         # Initialize the expected shape with None. Loaded from the metadata.
         self.expected_shape = None
+        self.vae_encoded = None
+        self.vae_hf_model_id = None
 
         # Collect chunks.
         self.chunks = []
@@ -81,6 +85,17 @@ class DatasetRE10k(IterableDataset):
                 else:
                     self.expected_shape = tuple(metadata["expected_shape"])
                     print(f"Expected shape for dataset images: {self.expected_shape}")
+
+                if self.vae_encoded is not None:
+                    assert self.vae_encoded == metadata.get("vae_encoded")
+                    assert self.vae_hf_model_id == metadata.get("vae_hf_model_id")
+                else:
+                    self.vae_encoded = metadata.get("vae_encoded", None)
+                    self.vae_hf_model_id = metadata.get("vae_hf_model_id", None)
+
+                    if self.vae_encoded is not None:
+                        print(f"Dataset is VAE pre-encoded: {self.vae_encoded}")
+                        print(f"Dataset VAE HF model ID: {self.vae_hf_model_id}. Make sure to load the correct VAE model for decoding.")
 
             root = root / self.data_stage
             root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch"])
@@ -147,8 +162,14 @@ class DatasetRE10k(IterableDataset):
                     # reverse the context
                     # context_indices = torch.flip(context_indices, dims=[0])
                     # print(context_indices)
+                    if self.cfg.sort_context_index:
+                        context_indices = context_indices.sort()[0]
+                    if self.cfg.sort_target_index:
+                        target_indices = target_indices.sort()[0]
+
                 except ValueError:
                     # Skip because the example doesn't have enough frames.
+                    # print(f"index error for {scene}, skip")
                     continue
 
                 # Skip the example if the field of view is too wide.
@@ -185,7 +206,7 @@ class DatasetRE10k(IterableDataset):
                     scale = 1
 
                 nf_scale = scale if self.cfg.baseline_scale_bounds else 1.0
-                example = {
+                example_out = {
                     "context": {
                         "extrinsics": extrinsics[context_indices],
                         "intrinsics": intrinsics[context_indices],
@@ -204,14 +225,28 @@ class DatasetRE10k(IterableDataset):
                     },
                     "scene": scene,
                 }
+
+                # Load the vae latents if available
+                if self.vae_encoded:
+                    assert "vae_latents" in example, "VAE latents not found in the dataset"
+                    
+                    context_vae_latents = [example["vae_latents"][index.item()] for index in context_indices]
+                    target_vae_latents = [example["vae_latents"][index.item()] for index in target_indices]
+
+                    example_out["context"]["vae_latents"] = context_vae_latents
+                    example_out["target"]["vae_latents"] = target_vae_latents
+
                 if self.stage == "train" and self.cfg.augment:
-                    example = apply_augmentation_shim(example)
-                yield apply_crop_shim(example, tuple(self.cfg.image_shape))
+                    example_out = apply_augmentation_shim(example_out)
+                yield apply_crop_shim(example_out, tuple(self.cfg.image_shape))
 
     def convert_poses(
         self,
         poses: Float[Tensor, "batch 18"],
-    ) -> tuple[Float[Tensor, "batch 4 4"], Float[Tensor, "batch 3 3"],]:  # extrinsics  # intrinsics
+    ) -> tuple[
+        Float[Tensor, "batch 4 4"],  # extrinsics
+        Float[Tensor, "batch 3 3"],  # intrinsics
+    ]:
         b, _ = poses.shape
 
         # Convert the intrinsics to a 3x3 normalized K matrix.

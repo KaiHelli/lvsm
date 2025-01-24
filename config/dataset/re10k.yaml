@@ -1,5 +1,5 @@
 defaults:
-  - view_sampler: random
+  - view_sampler: bounded
 
 name: re10k
 roots: [datasets/re10k]

@@ -4,6 +4,7 @@ defaults:
   - override /dataset: re10k
   - override /loss: [mse]
   - override /model/vae@lvsm_cfg.vae_cfg: sd35
+  - override /dataset/view_sampler: boundedv2
 
 lvsm_cfg:
   transformer_cfg:
@@ -29,6 +30,14 @@ dataset:
   far: 100.
   baseline_scale_bounds: false
   make_baseline_1: false
+  sort_target_index: true
+  sort_context_index: true 
+  view_sampler:
+    target_views_replace_sample: false
+    num_context_views: 2  # Only relevant for the test stage, as we are sampling randomly below
+    min_context_views: 2
+    max_context_views: 6
+    max_context_views_warm_up_steps: 60_000
 
 test:
   eval_time_skip_steps: 5

@@ -8,12 +8,13 @@
             "module": "src.main",
             "console": "integratedTerminal",
             "args": [
-                "+experiment=re10k",
+                "+experiment=re10k_vae",
                 "mode=train",
                 "checkpointing.resume=False",
                 "wandb.mode=disabled",
                 "model/transformer@lvsm_cfg.transformer_cfg=lvsm_debug"
-            ]
+            ],
+            "justMyCode": false
         },
         {
             "name": "Debug p3d_visualize_scene.py",

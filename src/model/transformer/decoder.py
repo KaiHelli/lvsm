@@ -20,8 +20,6 @@ class DecoderBlock(nn.Module):
         qk_norm=False,
         qk_exp_seq_len=None,
         sdpa_kernel="auto",
-        min_num_context_views = 2, 
-        max_num_context_views=2,
     ):
         """
         Decoder block for the Transformer model.
@@ -56,8 +54,6 @@ class DecoderBlock(nn.Module):
             qk_norm=qk_norm,
             qk_exp_seq_len=qk_exp_seq_len,
             sdpa_kernel=sdpa_kernel,
-            min_num_context_views = min_num_context_views,
-            max_num_context_views= max_num_context_views,
         )
 
         # Multi-head cross-attention (encoder-decoder attention)
@@ -72,8 +68,6 @@ class DecoderBlock(nn.Module):
             qk_norm=qk_norm,
             qk_exp_seq_len=qk_exp_seq_len,
             sdpa_kernel=sdpa_kernel,
-            min_num_context_views = min_num_context_views,
-            max_num_context_views= max_num_context_views,
         )
 
         # Feedforward layer
@@ -107,7 +101,7 @@ class DecoderBlock(nn.Module):
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
-    def forward(self, x, enc_output, n_src, causal=True, self_attn_mask=None, cross_attn_mask=None):
+    def forward(self, x, enc_output, causal=True, self_attn_mask=None, cross_attn_mask=None):
         """
         Forward pass of the decoder block.
 
@@ -122,12 +116,12 @@ class DecoderBlock(nn.Module):
             # Pre-Layer Normalization variant
             # Layer normalization before attention and feedforward
             # Self-attention
-            attn = self.self_attn(self.norm1(x), causal=causal, attn_mask=self_attn_mask, n_src=n_src)
+            attn = self.self_attn(self.norm1(x), causal=causal, attn_mask=self_attn_mask)
             x = x + self.dropout(attn)
 
             if enc_output is not None:
                 # Cross-attention (encoder-decoder attention)
-                cross_attn = self.cross_attn(self.norm2(x), enc_output, causal=False, attn_mask=cross_attn_mask, n_src=n_src)
+                cross_attn = self.cross_attn(self.norm2(x), enc_output, causal=False, attn_mask=cross_attn_mask)
                 x = x + self.dropout(cross_attn)
 
             # Feedforward
@@ -136,7 +130,7 @@ class DecoderBlock(nn.Module):
         else:
             # Post-Layer Normalization variant (original)
             # Self-attention
-            attn = self.self_attn(x, causal=causal, attn_mask=self_attn_mask,n_src=n_src)
+            attn = self.self_attn(x, causal=causal, attn_mask=self_attn_mask)
             x = x + self.dropout(attn)
 
             # Layer normalization
@@ -144,7 +138,7 @@ class DecoderBlock(nn.Module):
 
             if enc_output is not None:
                 # Cross-attention (encoder-decoder attention)
-                cross_attn = self.cross_attn(x, enc_output, causal=False, attn_mask=cross_attn_mask,n_src=n_src)
+                cross_attn = self.cross_attn(x, enc_output, causal=False, attn_mask=cross_attn_mask)
                 x = x + self.dropout(cross_attn)
                 # Layer normalization
                 x = self.norm2(x)
@@ -176,7 +170,7 @@ class TransformerDecoder(nn.Module):
         # Layer normalization for the final output
         self.norm = LayerNorm(d_model, bias=bias)
 
-    def forward(self, x, enc_output,n_src, causal=True, self_attn_mask=None, cross_attn_mask=None):
+    def forward(self, x, enc_output, causal=True, self_attn_mask=None, cross_attn_mask=None):
         """
         Forward pass of the transformer decoder.
 
@@ -193,7 +187,6 @@ class TransformerDecoder(nn.Module):
                 causal=causal,
                 self_attn_mask=self_attn_mask,
                 cross_attn_mask=cross_attn_mask,
-                n_src=n_src
             )
 
         # Final layer normalization
