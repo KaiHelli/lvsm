@@ -135,7 +135,7 @@ class DatasetRE10k(IterableDataset):
         for chunk_path in self.chunks:
             # print(chunk_path)
             # Load the chunk.
-            chunk = torch.load(chunk_path)
+            chunk = torch.load(chunk_path, map_location="cpu")
 
             if self.cfg.overfit_to_scene is not None:
                 item = [x for x in chunk if x["key"] == self.cfg.overfit_to_scene]
