@@ -216,7 +216,8 @@ if __name__ == "__main__":
                 mask[bad_images] = False
 
                 print(f"\n-- Removing {len(bad_images)} images with unexpected shape from {scene['key']}")
-                images = images[mask]
+                # Bad images were already filtered out, so we can just update the scene
+                # images = images[mask]
                 scene["timestamps"] = scene["timestamps"][mask]
                 scene["cameras"] = scene["cameras"][mask]
 
@@ -246,8 +247,8 @@ if __name__ == "__main__":
                     for slice in slices:
                         mean, std = vae.encode(slice, sample=False)
 
-                    means.append(mean)
-                    stds.append(std)
+                        means.append(mean)
+                        stds.append(std)
 
                 # Concatenate the latents
                 mean = torch.cat(means, dim=0)

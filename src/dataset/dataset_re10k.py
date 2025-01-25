@@ -233,8 +233,9 @@ class DatasetRE10k(IterableDataset):
                 if self.vae_encoded:
                     assert "vae_latents" in example, "VAE latents not found in the dataset"
 
-                    context_vae_latents = [example["vae_latents"][index.item()] for index in context_indices]
-                    target_vae_latents = [example["vae_latents"][index.item()] for index in target_indices]
+                    context_vae_latents = {key: example["vae_latents"][key][context_indices] for key in ["mean", "std"]}
+
+                    target_vae_latents = {key: example["vae_latents"][key][target_indices] for key in ["mean", "std"]}
 
                     example_out["context"]["vae_latents"] = context_vae_latents
                     example_out["target"]["vae_latents"] = target_vae_latents

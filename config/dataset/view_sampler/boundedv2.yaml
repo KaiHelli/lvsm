@@ -15,8 +15,8 @@ initial_max_distance_between_context_views: 6
 initial_max_distance_to_context_views: 0
 
 extra_views_sampling_strategy: null
-random_num_context_views: null
-match_random_num_context_views_per_batch: null
-min_context_views: null
-max_context_views: null
-max_context_views_warm_up_steps: null
+random_num_context_views: False
+match_random_num_context_views_per_batch: False
+min_context_views: 0
+max_context_views: 0
+max_context_views_warm_up_steps: 0

@@ -41,7 +41,7 @@ dataset:
     min_context_views: 2
     max_context_views: 6
     max_context_views_warm_up_steps: 60_000
-    extra_views_sampling_strategy: "farthest_point" 
+    extra_views_sampling_strategy: farthest_point
 
 test:
   eval_time_skip_steps: 5
