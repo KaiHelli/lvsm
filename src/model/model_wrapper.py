@@ -195,7 +195,11 @@ class ModelWrapper(LightningModule):
 
         # Run the model.
         output, output_latent = self(
-            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask, batch["context"].get("vae_latents", None)
+            batch["context"]["image"],
+            batch["context"]["plucker_rays"],
+            batch["target"]["plucker_rays"],
+            attn_mask,
+            batch["context"].get("vae_latents", None),
         )
 
         target_gt = batch["target"]["image"]
@@ -311,7 +315,11 @@ class ModelWrapper(LightningModule):
         # Run the model.
         with self.benchmarker.time("model"):
             output, _ = self.model(
-                batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask, batch["context"].get("vae_latents", None)
+                batch["context"]["image"],
+                batch["context"]["plucker_rays"],
+                batch["target"]["plucker_rays"],
+                attn_mask,
+                batch["context"].get("vae_latents", None),
             )
 
         # Type the output.
@@ -414,7 +422,11 @@ class ModelWrapper(LightningModule):
 
         # Run the model.
         output, output_latent = self.model(
-            batch["context"]["image"], batch["context"]["plucker_rays"], batch["target"]["plucker_rays"], attn_mask, batch["context"].get("vae_latents", None)
+            batch["context"]["image"],
+            batch["context"]["plucker_rays"],
+            batch["target"]["plucker_rays"],
+            attn_mask,
+            batch["context"].get("vae_latents", None),
         )
 
         target_gt = batch["target"]["image"]
@@ -426,7 +438,7 @@ class ModelWrapper(LightningModule):
                 loss_gt = self.model.vae.sample(vae_latents["mean"], vae_latents["std"])
             else:
                 loss_gt = self.model.vae.encode(target_gt)
-            
+
             loss_pred = output_latent
         else:
             loss_gt = target_gt
@@ -643,7 +655,11 @@ class ModelWrapper(LightningModule):
         for i in range(num_frame_batches):
             # Run the model batch-wise.
             output, _ = self.model(
-                batch["context"]["image"], batch["context"]["plucker_rays"], plucker_rays_batched[:, i], attn_mask, batch["context"].get("vae_latents", None)
+                batch["context"]["image"],
+                batch["context"]["plucker_rays"],
+                plucker_rays_batched[:, i],
+                attn_mask,
+                batch["context"].get("vae_latents", None),
             )
             outputs.append(output)
 

@@ -24,9 +24,8 @@ class ViewSamplerBoundedCfg:
 class ViewSamplerBounded(ViewSampler[ViewSamplerBoundedCfg]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        assert self.cfg.num_context_views == 2, "Only two context views are supported for this sampler."
 
+        assert self.cfg.num_context_views == 2, "Only two context views are supported for this sampler."
 
     def schedule(self, initial: int, final: int) -> int:
         fraction = self.global_step / self.cfg.warm_up_steps

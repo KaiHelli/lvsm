@@ -10,5 +10,6 @@ dataset:
     initial_min_distance_between_context_views: 25
     initial_max_distance_between_context_views: 45
     initial_max_distance_to_context_views: 5  # 0
-    min_context_views: 2
+
+    num_context_views: 2
     num_target_views: 6

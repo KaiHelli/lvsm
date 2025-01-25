@@ -3,6 +3,7 @@ import functools
 
 from src.misc.utils import tensor_on_gpu
 
+
 class LayerNorm(torch.nn.LayerNorm):
     """
     Custom LayerNorm module that handles FP16 inputs.
@@ -60,27 +61,27 @@ class QKNormV2(torch.nn.Module):
 
     However, this version follows the version of Dehghani et al. (2023).
 
-    This version uses plain LayerNorm instead of the QKScaleUp. 
+    This version uses plain LayerNorm instead of the QKScaleUp.
     Instead of having a learnable parameter per head, in this version, we have head_dim learnable parameters in the LayerNorm, shared across all heads.
-    
+
     @misc{dehghani2023scalingvisiontransformers22,
-        title={Scaling Vision Transformers to 22 Billion Parameters}, 
+        title={Scaling Vision Transformers to 22 Billion Parameters},
         author={Mostafa Dehghani and Josip Djolonga and Basil Mustafa and Piotr Padlewski and Jonathan Heek and Justin Gilmer and Andreas Steiner and Mathilde Caron and Robert Geirhos and Ibrahim Alabdulmohsin and Rodolphe Jenatton and Lucas Beyer and Michael Tschannen and Anurag Arnab and Xiao Wang and Carlos Riquelme and Matthias Minderer and Joan Puigcerver and Utku Evci and Manoj Kumar and Sjoerd van Steenkiste and Gamaleldin F. Elsayed and Aravindh Mahendran and Fisher Yu and Avital Oliver and Fantine Huot and Jasmijn Bastings and Mark Patrick Collier and Alexey Gritsenko and Vighnesh Birodkar and Cristina Vasconcelos and Yi Tay and Thomas Mensink and Alexander Kolesnikov and Filip Pavetić and Dustin Tran and Thomas Kipf and Mario Lučić and Xiaohua Zhai and Daniel Keysers and Jeremiah Harmsen and Neil Houlsby},
         year={2023},
         eprint={2302.05442},
         archivePrefix={arXiv},
         primaryClass={cs.CV},
-        url={https://arxiv.org/abs/2302.05442}, 
+        url={https://arxiv.org/abs/2302.05442},
     }
     """
+
     def __init__(self, head_dim: int, bias: bool):
         super(QKNormV2, self).__init__()
 
         self.q_layer_norm = LayerNorm(head_dim, bias=bias)
         self.k_layer_norm = LayerNorm(head_dim, bias=bias)
-    
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
 
+    def forward(self, q: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
         q = self.q_layer_norm(q)
         k = self.k_layer_norm(k)
 

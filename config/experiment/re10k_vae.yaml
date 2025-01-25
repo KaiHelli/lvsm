@@ -16,7 +16,7 @@ wandb:
 
 data_loader:
   train:
-    batch_size: 64
+    batch_size: 4
 
 trainer:
   max_steps: 100_001
@@ -35,9 +35,13 @@ dataset:
   view_sampler:
     target_views_replace_sample: false
     num_context_views: 2  # Only relevant for the test stage, as we are sampling randomly below
+    num_target_views: 6
+    random_num_context_views: True
+    match_random_num_context_views_per_batch: True
     min_context_views: 2
     max_context_views: 6
     max_context_views_warm_up_steps: 60_000
+    extra_views_sampling_strategy: "farthest_point" 
 
 test:
   eval_time_skip_steps: 5

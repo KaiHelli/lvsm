@@ -8,13 +8,13 @@ from pytorch_lightning import LightningDataModule
 from torch import Generator, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, default_collate
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data._utils.collate import collate, default_collate_fn_map
 
 from ..misc.step_tracker import StepTracker
 from . import DatasetCfg, get_dataset
 from .types import DataShim, Stage
 from .validation_wrapper import ValidationWrapper
 from .shims.plucker_rays import generate_rays_batch
+from .batch_wrapper import BatchWrapper
 
 
 def get_data_shim(model: nn.Module) -> DataShim:
@@ -85,20 +85,20 @@ class DataModule(LightningDataModule):
         self.step_tracker = step_tracker
         self.dataset_shim = dataset_shim
         self.global_rank = global_rank
+        self.collate_fn = default_collate
 
-    @staticmethod
-    def collate_fn(batch: List[Any]) -> Any:
-        
-        def collate_tensor_fn(
-            batch,
-            *,
-            collate_fn_map: Optional[dict[Union[type, tuple[type, ...]], Callable]] = None,):
-            # TODO: Padding should then also be reflected in mask.
-            return pad_sequence(batch, batch_first=True)
-        
-        default_collate_fn_map[torch.Tensor] = collate_tensor_fn
+    # @staticmethod
+    # def collate_fn(batch: List[Any]) -> Any:
 
-        return collate(batch, collate_fn_map=default_collate_fn_map)
+    #     def collate_tensor_fn(
+    #         batch,
+    #         *,
+    #         collate_fn_map: Optional[dict[Union[type, tuple[type, ...]], Callable]] = None,):
+    #         return pad_sequence(batch, batch_first=True, padding_value=-1)
+
+    #     default_collate_fn_map[torch.Tensor] = collate_tensor_fn
+
+    #     return collate(batch, collate_fn_map=default_collate_fn_map)
 
     def get_persistent(self, loader_cfg: DataLoaderStageCfg) -> bool | None:
         return None if loader_cfg.num_workers == 0 else loader_cfg.persistent_workers
@@ -113,12 +113,20 @@ class DataModule(LightningDataModule):
     def train_dataloader(self):
         dataset = get_dataset(self.dataset_cfg, "train", self.step_tracker)
         dataset = self.dataset_shim(dataset, "train")
+
+        batch_size = self.data_loader_cfg.train.batch_size
+        # For boundedv2, we need to batch the dataset ourselves as we need a
+        # fixed number of context views within a batch.
+        if self.dataset_cfg.view_sampler.name == "boundedv2":
+            dataset = BatchWrapper(dataset, batch_size)
+            batch_size = None
+
         return DataLoader(
             dataset,
-            self.data_loader_cfg.train.batch_size,
+            batch_size=batch_size,
             shuffle=not isinstance(dataset, IterableDataset),
             num_workers=self.data_loader_cfg.train.num_workers,
-            collate_fn=DataModule.collate_fn,
+            collate_fn=self.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.train),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.train),
@@ -127,11 +135,19 @@ class DataModule(LightningDataModule):
     def val_dataloader(self):
         dataset = get_dataset(self.dataset_cfg, "val", self.step_tracker)
         dataset = self.dataset_shim(dataset, "val")
+
+        batch_size = self.data_loader_cfg.val.batch_size
+        # For boundedv2, we need to batch the dataset ourselves as we need a
+        # fixed number of context views within a batch.
+        if self.dataset_cfg.view_sampler.name == "boundedv2":
+            dataset = BatchWrapper(dataset, batch_size)
+            batch_size = None
+
         return DataLoader(
             ValidationWrapper(dataset, 1),
-            self.data_loader_cfg.val.batch_size,
+            batch_size=batch_size,
             num_workers=self.data_loader_cfg.val.num_workers,
-            collate_fn=DataModule.collate_fn,
+            collate_fn=self.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.val),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.val),
@@ -144,11 +160,19 @@ class DataModule(LightningDataModule):
             self.step_tracker,
         )
         dataset = self.dataset_shim(dataset, "test")
+
+        batch_size = self.data_loader_cfg.test.batch_size
+        # For boundedv2, we need to batch the dataset ourselves as we need a
+        # fixed number of context views within a batch.
+        if self.dataset_cfg.view_sampler.name == "boundedv2":
+            dataset = BatchWrapper(dataset, batch_size)
+            batch_size = None
+
         return DataLoader(
             dataset,
-            self.data_loader_cfg.test.batch_size,
+            batch_size=batch_size,
             num_workers=self.data_loader_cfg.test.num_workers,
-            collate_fn=DataModule.collate_fn,
+            collate_fn=self.collate_fn,
             generator=self.get_generator(self.data_loader_cfg.test),
             worker_init_fn=worker_init_fn,
             persistent_workers=self.get_persistent(self.data_loader_cfg.test),

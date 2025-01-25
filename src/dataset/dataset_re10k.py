@@ -41,6 +41,7 @@ class DatasetRE10kCfg(DatasetCfgCommon):
     sort_context_index: Optional[bool] = False
     sort_target_index: Optional[bool] = False
 
+
 class DatasetRE10k(IterableDataset):
     cfg: DatasetRE10kCfg
     stage: Stage
@@ -95,7 +96,9 @@ class DatasetRE10k(IterableDataset):
 
                     if self.vae_encoded is not None:
                         print(f"Dataset is VAE pre-encoded: {self.vae_encoded}")
-                        print(f"Dataset VAE HF model ID: {self.vae_hf_model_id}. Make sure to load the correct VAE model for decoding.")
+                        print(
+                            f"Dataset VAE HF model ID: {self.vae_hf_model_id}. Make sure to load the correct VAE model for decoding."
+                        )
 
             root = root / self.data_stage
             root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch"])
@@ -229,7 +232,7 @@ class DatasetRE10k(IterableDataset):
                 # Load the vae latents if available
                 if self.vae_encoded:
                     assert "vae_latents" in example, "VAE latents not found in the dataset"
-                    
+
                     context_vae_latents = [example["vae_latents"][index.item()] for index in context_indices]
                     target_vae_latents = [example["vae_latents"][index.item()] for index in target_indices]
 
@@ -243,10 +246,7 @@ class DatasetRE10k(IterableDataset):
     def convert_poses(
         self,
         poses: Float[Tensor, "batch 18"],
-    ) -> tuple[
-        Float[Tensor, "batch 4 4"],  # extrinsics
-        Float[Tensor, "batch 3 3"],  # intrinsics
-    ]:
+    ) -> tuple[Float[Tensor, "batch 4 4"], Float[Tensor, "batch 3 3"],]:  # extrinsics  # intrinsics
         b, _ = poses.shape
 
         # Convert the intrinsics to a 3x3 normalized K matrix.

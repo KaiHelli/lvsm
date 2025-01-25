@@ -1,4 +1,4 @@
-'''
+"""
 Implementation by DepthSplat.
 
 @article{xu2024depthsplat,
@@ -9,7 +9,7 @@ Implementation by DepthSplat.
 }
 
 Modified from latentSplat and pixelSplat to handle extrapolate and more context views.
-'''
+"""
 
 from dataclasses import dataclass
 from typing import Literal, Optional
@@ -71,16 +71,38 @@ class ViewSamplerBoundedV2Cfg:
     initial_min_distance_between_context_views: int
     initial_max_distance_between_context_views: int
     initial_max_distance_to_context_views: int
+    random_num_context_views: bool = False
+    match_random_num_context_views_per_batch: bool = False
     min_context_views: int = 0
     max_context_views: int = 0
     max_context_views_warm_up_steps: int = 0
     extra_views_sampling_strategy: Optional[Literal["random", "farthest_point", "equal"]] = "random"
     target_views_replace_sample: Optional[bool] = True
 
+
 class ViewSamplerBoundedV2(ViewSampler[ViewSamplerBoundedV2Cfg]):
     def schedule(self, initial: int, final: int, steps: int) -> int:
         fraction = self.global_step / steps
         return min(initial + int((final - initial) * fraction), final)
+
+    def sample_num_context_views(self) -> int | None:
+        if self.stage == "test" or not self.cfg.random_num_context_views:
+            self.random_num_views = None
+
+        assert (
+            self.cfg.min_context_views > 0 and self.cfg.max_context_views > 0
+        ), "min_context_views and max_context_views must be set"
+
+        if self.cfg.max_context_views_warm_up_steps > 0:
+            max_context_views = self.schedule(
+                self.cfg.min_context_views, self.cfg.max_context_views, self.cfg.max_context_views_warm_up_steps
+            )
+        else:
+            max_context_views = self.cfg.max_context_views
+
+        random_num_views = random.randint(self.cfg.min_context_views, max_context_views)
+
+        self.random_num_views = random_num_views
 
     def sample(
         self,
@@ -99,15 +121,12 @@ class ViewSamplerBoundedV2(ViewSampler[ViewSamplerBoundedV2Cfg]):
         if max_num_views is not None:
             num_views = min(num_views, max_num_views)
 
-        if self.cfg.min_context_views > 0 and self.cfg.max_context_views > 0 and self.stage != "test":
-            if self.cfg.max_context_views_warm_up_steps > 0:
-                max_context_views = self.schedule(self.cfg.min_context_views, self.cfg.max_context_views, self.cfg.max_context_views_warm_up_steps)
-            else:
-                max_context_views = self.cfg.max_context_views
+        random_num_views = None
+        if self.cfg.random_num_context_views and self.stage != "test":
+            if not self.cfg.match_random_num_context_views_per_batch:
+                self.sample_num_context_views()
 
-            random_num_views = random.randint(self.cfg.min_context_views, max_context_views)
-        else:
-            random_num_views = None
+            random_num_views = self.random_num_views
 
         # Compute the context view spacing based on the current global step.
         if self.stage == "test":
@@ -136,14 +155,12 @@ class ViewSamplerBoundedV2(ViewSampler[ViewSamplerBoundedV2Cfg]):
 
         if random_num_views is not None:
             # smaller context gap accordingly
-            scale_factor = max(max_context_views // random_num_views, 1)
+            scale_factor = max(self.cfg.max_context_views // random_num_views, 1)
             max_context_gap = max_context_gap // scale_factor
             min_context_gap = min_context_gap // scale_factor
 
         if not self.cameras_are_circular:
-            max_context_gap = min(
-                num_views - 1, max_context_gap
-            )
+            max_context_gap = min(num_views - 1, max_context_gap)
 
         # Compute the margin from context window to target window based on the current global step
         if self.stage != "test" and self.cfg.target_gap_warm_up_steps > 0:
@@ -227,25 +244,23 @@ class ViewSamplerBoundedV2(ViewSampler[ViewSamplerBoundedV2Cfg]):
         if total_num_views > 2:
             num_extra_views = total_num_views - 2
             extra_views = []
-            if self.cfg.extra_views_sampling_strategy == 'random':
+            if self.cfg.extra_views_sampling_strategy == "random":
                 while len(set(extra_views)) != num_extra_views:
                     extra_views = torch.randint(
                         index_context_left + 1,
                         index_context_right,
                         (num_extra_views,),
                     ).tolist()
-            elif self.cfg.extra_views_sampling_strategy == 'farthest_point':
+            elif self.cfg.extra_views_sampling_strategy == "farthest_point":
                 context_bounded_index = torch.arange(index_context_left, index_context_right + 1)
                 candidate_views_position = extrinsics[context_bounded_index, :3, -1].unsqueeze(0)
-                index_context_local = farthest_point_sample(
-                    candidate_views_position, total_num_views
-                ).squeeze(0)
+                index_context_local = farthest_point_sample(candidate_views_position, total_num_views).squeeze(0)
                 # remap context index back to global scene based index
                 index_context = context_bounded_index[index_context_local]
                 index_context_left = index_context[0].item()
                 index_context_right = index_context[-1].item()
                 extra_views = index_context[1:-1].tolist()
-            elif self.cfg.extra_views_sampling_strategy == 'equal':
+            elif self.cfg.extra_views_sampling_strategy == "equal":
                 raise NotImplementedError("Equal sampling strategy not implemented yet.")
 
             # sort the index
