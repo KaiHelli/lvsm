@@ -89,26 +89,33 @@ class VAE(torch.nn.Module):
             return VAE.sample(mean, std) if sample else (mean, std)
 
         # ----- 5D case -----
-        # Decide how many slices to process in parallel
         b = x.shape[0]
-        num_slices = 1 if b == 1 else (self.num_slices_in_parallel or b)
+        # If num_slices_in_parallel is None, process everything at once (chunk_size = b)
+        chunk_size = b if self.num_slices_in_parallel is None else self.num_slices_in_parallel
 
-        # Reshape to process slices in parallel
-        x_slices = rearrange(x, "(b1 b2) n c h w -> b1 (b2 n) c h w", b2=num_slices)
+        # Split along the batch dimension into chunks of size `chunk_size`
+        x_chunks = torch.split(x, split_size_or_sections=chunk_size, dim=0)
 
-        mean, std = [], []
-        for x_slice in x_slices:
-            latent_dist = self.vae.encode(x_slice, return_dict=False)[0]
-            mean.append(latent_dist.mean)
-            std.append(latent_dist.std)
+        mean_chunks, std_chunks = [], []
+        for chunk in x_chunks:
+            # chunk: [chunk_b, n, c, h, w]
+            chunk_b = chunk.shape[0]
 
-        # Combine results from all slices
-        mean = torch.stack(mean)
-        std = torch.stack(std)
+            # Flatten the first two dimensions for VAE: [chunk_b*n, c, h, w]
+            chunk = rearrange(chunk, "b n c h w -> (b n) c h w")
 
-        # Reshape back to the original batch structure
-        mean = rearrange(mean, "b1 (b2 n) c h w -> (b1 b2) n c h w", b2=num_slices)
-        std = rearrange(std, "b1 (b2 n) c h w -> (b1 b2) n c h w", b2=num_slices)
+            latent_dist = self.vae.encode(chunk, return_dict=False)[0]
+            chunk_mean, chunk_std = latent_dist.mean, latent_dist.std
+
+            # Reshape back to 5D: [chunk_b, n, c, h, w]
+            chunk_mean = rearrange(chunk_mean, "(b n) c h w -> b n c h w", b=chunk_b)
+            chunk_std = rearrange(chunk_std, "(b n) c h w -> b n c h w", b=chunk_b)
+
+            mean_chunks.append(chunk_mean)
+            std_chunks.append(chunk_std)
+
+        mean = torch.cat(mean_chunks, dim=0)
+        std = torch.cat(std_chunks, dim=0)
 
         return VAE.sample(mean, std) if sample else (mean, std)
 
@@ -129,16 +136,27 @@ class VAE(torch.nn.Module):
 
         # ----- 5D case -----
         b = z.shape[0]
-        num_slices = 1 if b == 1 else (self.num_slices_in_parallel or b)
+        # If num_slices_in_parallel is None, process everything at once (chunk_size = b)
+        chunk_size = b if self.num_slices_in_parallel is None else self.num_slices_in_parallel
 
-        # Reshape to process slices in parallel
-        z_slices = rearrange(z, "(b1 b2) n c h w -> b1 (b2 n) c h w", b2=num_slices)
+        # Split along the batch dimension into chunks of size `chunk_size`
+        z_chunks = torch.split(z, split_size_or_sections=chunk_size, dim=0)
 
-        decoded_slices = [self.vae.decode(z_slice, return_dict=False)[0] for z_slice in z_slices]
+        decoded_chunks = []
+        for chunk in z_chunks:
+            # chunk: [chunk_b, n, c, h, w]
+            chunk_b = chunk.shape[0]
 
-        out = torch.stack(decoded_slices)
-        out = rearrange(out, "b1 (b2 n) c h w -> (b1 b2) n c h w", b2=num_slices)
+            # Flatten the first two dimensions for VAE: [chunk_b*n, c, h, w]
+            chunk = rearrange(chunk, "b n c h w -> (b n) c h w")
 
+            decoded = self.vae.decode(chunk, return_dict=False)[0]
+
+            # Reshape back to 5D: [chunk_b, n, c, h, w]
+            decoded = rearrange(decoded, "(b n) c h w -> b n c h w", b=chunk_b)
+            decoded_chunks.append(decoded)
+
+        out = torch.cat(decoded_chunks, dim=0)
         return out
 
     @staticmethod
