@@ -82,6 +82,7 @@ class TrainCfg:
     print_log_every_n_steps: int
     val_every_n_batches: int
     vis_every_n_validations: int
+    decode_vae_latents: bool
 
 
 @runtime_checkable
@@ -199,17 +200,21 @@ class ModelWrapper(LightningModule):
             batch["context"]["plucker_rays"],
             batch["target"]["plucker_rays"],
             attn_mask,
-            batch["context"].get("vae_latents", None),
+            vae_latents=batch["context"].get("vae_latents", None),
+            decode_latents=self.train_cfg.decode_vae_latents or self.val_generated_vis,
         )
 
         target_gt = batch["target"]["image"]
 
-        # Compute metrics.
-        psnr_probabilistic = compute_psnr(
-            rearrange(target_gt, "b v c h w -> (b v) c h w"),
-            rearrange(output, "b v c h w -> (b v) c h w"),
-        )
-        self.log("train/psnr_probabilistic", psnr_probabilistic.mean())
+        # Output can be None if we don't want to decode the latents.
+        # In this case, we don't compute the PSNR metric.
+        if output is not None:
+            # Compute metrics.
+            psnr_probabilistic = compute_psnr(
+                rearrange(target_gt, "b v c h w -> (b v) c h w"),
+                rearrange(output, "b v c h w -> (b v) c h w"),
+            )
+            self.log("train/psnr_probabilistic", psnr_probabilistic.mean())
 
         # If latent space is used, compute metrics for the latent space.
         if self.model.vae is not None:
@@ -319,7 +324,7 @@ class ModelWrapper(LightningModule):
                 batch["context"]["plucker_rays"],
                 batch["target"]["plucker_rays"],
                 attn_mask,
-                batch["context"].get("vae_latents", None),
+                vae_latents=batch["context"].get("vae_latents", None),
             )
 
         # Type the output.
@@ -426,7 +431,7 @@ class ModelWrapper(LightningModule):
             batch["context"]["plucker_rays"],
             batch["target"]["plucker_rays"],
             attn_mask,
-            batch["context"].get("vae_latents", None),
+            vae_latents=batch["context"].get("vae_latents", None),
         )
 
         target_gt = batch["target"]["image"]
@@ -659,7 +664,7 @@ class ModelWrapper(LightningModule):
                 batch["context"]["plucker_rays"],
                 plucker_rays_batched[:, i],
                 attn_mask,
-                batch["context"].get("vae_latents", None),
+                vae_latents=batch["context"].get("vae_latents", None),
             )
             outputs.append(output)
 

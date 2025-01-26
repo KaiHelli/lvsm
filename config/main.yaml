@@ -56,6 +56,7 @@ train:
   print_log_every_n_steps: 1
   val_every_n_batches: 64
   vis_every_n_validations: 64       # 64 * 64 -> every 4.096 batches
+  decode_vae_latents: false             # Decode latents during training, only applied if VAE is used. Skips PSNR computation in each iteration.
 
 test:
   output_path: outputs/test
