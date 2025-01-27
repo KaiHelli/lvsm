@@ -39,7 +39,7 @@ dataset:
     random_num_context_views: True
     match_random_num_context_views_per_batch: True
     min_context_views: 2
-    max_context_views: 6
+    max_context_views: 8
     max_context_views_warm_up_steps: 60_000
     extra_views_sampling_strategy: farthest_point
 

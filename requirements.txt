@@ -26,6 +26,7 @@ kaleido<0.4
 diffusers>=0.32.1
 accelerate>=1.2.1
 transformers>=4.48.0
+blosc2>=3.0.0
 
 # Excluded as those are currently not used in the codebase
 #torchaudio>=2.5.1

@@ -4,6 +4,7 @@ from functools import cached_property
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
+import blosc2
 
 import torch
 import torchvision.transforms as tf
@@ -101,9 +102,17 @@ class DatasetRE10k(IterableDataset):
                         )
 
             root = root / self.data_stage
-            root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch"])
-            print(f"Found {len(root_chunks)} chunks in {root}.")
+            root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch" or path.suffix == ".bl2"])
+
+
+            print(f"Found {len(root_chunks)} chunks in {root}. Dataset is {'not ' if not self.compressed else ''}compressed.")
             self.chunks.extend(root_chunks)
+        
+        self.compressed = any([chunk.suffix == ".bl2" for chunk in self.chunks])
+        assert not any(
+            chunk.suffix == (".torch" if self.compressed else ".bl2") 
+            for chunk in self.chunks
+        ), "Dataset chunks must be either all compressed or all uncompressed."
 
         if self.cfg.overfit_to_scene is not None:
             chunk_path = self.index[self.cfg.overfit_to_scene]
@@ -135,7 +144,12 @@ class DatasetRE10k(IterableDataset):
         for chunk_path in self.chunks:
             # print(chunk_path)
             # Load the chunk.
-            chunk = torch.load(chunk_path, map_location="cpu")
+            if self.compressed:
+                with open(chunk_path, "rb") as f:
+                    chunk = blosc2.decompress2(f.read())
+                    chunk = torch.load(BytesIO(chunk), map_location="cpu")
+            else:
+                chunk = torch.load(chunk_path, map_location="cpu")
 
             if self.cfg.overfit_to_scene is not None:
                 item = [x for x in chunk if x["key"] == self.cfg.overfit_to_scene]
@@ -302,6 +316,10 @@ class DatasetRE10k(IterableDataset):
                 with (root / data_stage / "index.json").open("r") as f:
                     index = json.load(f)
                 index = {k: Path(root / data_stage / v) for k, v in index.items()}
+
+                # If the dataset is compressed, update the index to point to the compressed files.
+                if self.compressed:
+                    index = {k: v.with_suffix(".bl2") for k, v in index.items()}
 
                 # The constituent datasets should have unique keys.
                 assert not (set(merged_index.keys()) & set(index.keys()))
