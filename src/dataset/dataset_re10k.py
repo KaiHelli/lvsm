@@ -105,7 +105,7 @@ class DatasetRE10k(IterableDataset):
             root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch" or path.suffix == ".bl2"])
 
 
-            print(f"Found {len(root_chunks)} chunks in {root}. Dataset is {'not ' if not self.compressed else ''}compressed.")
+            print(f"Found {len(root_chunks)} chunks in {root}.")
             self.chunks.extend(root_chunks)
         
         self.compressed = any([chunk.suffix == ".bl2" for chunk in self.chunks])
@@ -113,6 +113,8 @@ class DatasetRE10k(IterableDataset):
             chunk.suffix == (".torch" if self.compressed else ".bl2") 
             for chunk in self.chunks
         ), "Dataset chunks must be either all compressed or all uncompressed."
+
+        print(f"Dataset is {'not ' if not self.compressed else ''}compressed.")
 
         if self.cfg.overfit_to_scene is not None:
             chunk_path = self.index[self.cfg.overfit_to_scene]
