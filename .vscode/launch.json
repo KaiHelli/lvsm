@@ -17,6 +17,37 @@
             "justMyCode": false
         },
         {
+            "name": "Eval Scores",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.main",
+            "console": "integratedTerminal",
+            "args": [
+                "+experiment=re10k_vae",
+                "checkpointing.load=checkpoints/re10k_vae.ckpt",
+                "mode=test",
+                "dataset/view_sampler=evaluation",
+                "test.compute_scores=true"
+            ],
+        },
+        {
+            "name": "Eval Videos",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.main",
+            "console": "integratedTerminal",
+            "args": [
+                "+experiment=re10k_vae",
+                "checkpointing.load=checkpoints/re10k_vae.ckpt",
+                "mode=test",
+                "dataset/view_sampler=evaluation",
+                "dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json",
+                "test.save_video=true",
+                "test.save_image=false",
+                "test.compute_scores=false",
+            ],
+        },
+        {
             "name": "Debug p3d_visualize_scene.py",
             "type": "debugpy",
             "request": "launch",

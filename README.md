@@ -2,8 +2,6 @@
 
 An unofficial implementation of the multi-view image synthesis architecture proposed in the [LVSM](https://haian-jin.github.io/projects/LVSM/) paper. This implementation may not fully adhere to all original details or guarantee complete accuracy.
 
-**Caution:** Work in Progress / `README.md` not yet updated / Code non-functional
-
 ## Installation
 
 To get started, clone this project, create a conda virtual environment using Python 3.10+, and install the requirements:
@@ -42,9 +40,11 @@ pip install -r requirements_nightly.txt
 
 ## Acquiring Datasets
 
+LVSM uses RealEstate10K for scene-level experiments as well as Objaverse for object-level datasets. This repository only builds upon the scene-level dataset RealEstate10K. Adding support for Objaverse might be added at a later point.
+
 ### RealEstate10K and ACID
 
-Our MVSplat uses the same training datasets as pixelSplat. Below we quote pixelSplat's [detailed instructions](https://github.com/dcharatan/pixelsplat?tab=readme-ov-file#acquiring-datasets) on getting datasets.
+As this repository builds upon MVSplat, it supports the same datasets as pixelSplat. Below we quote pixelSplat's [detailed instructions](https://github.com/dcharatan/pixelsplat?tab=readme-ov-file#acquiring-datasets) on getting datasets.
 
 > pixelSplat was trained using versions of the RealEstate10k and ACID datasets that were split into ~100 MB chunks for use on server cluster file systems. Small subsets of the Real Estate 10k and ACID datasets in this format can be found [here](https://drive.google.com/drive/folders/1joiezNCyQK2BvWMnfwHJpm2V77c7iYGe?usp=sharing). To use them, simply unzip them into a newly created `datasets` folder in the project root directory.
 
@@ -62,7 +62,7 @@ Our MVSplat uses the same training datasets as pixelSplat. Below we quote pixelS
 
 To render novel views and compute evaluation metrics from a pretrained model,
 
-* get the [pretrained models](https://drive.google.com/drive/folders/14_E_5R6ojOWnLSrSVLVEMHnTiKsfddjU), and save them to `/checkpoints`
+* get the [pretrained models](TODO), and save them to `/checkpoints`
 
 * run the following:
 
@@ -74,12 +74,11 @@ mode=test \
 dataset/view_sampler=evaluation \
 test.compute_scores=true
 
-# acid
-python -m src.main +experiment=acid \
-checkpointing.load=checkpoints/acid.ckpt \
+# re10k with vae
+python -m src.main +experiment=re10k_vae \
+checkpointing.load=checkpoints/re10k_vae.ckpt \
 mode=test \
 dataset/view_sampler=evaluation \
-dataset.view_sampler.index_path=assets/evaluation_index_acid.json \
 test.compute_scores=true
 ```
 
@@ -97,6 +96,16 @@ dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json \
 test.save_video=true \
 test.save_image=false \
 test.compute_scores=false
+
+# re10k with vae
+python -m src.main +experiment=re10k_vae \
+checkpointing.load=checkpoints/re10k_vae.ckpt \
+mode=test \
+dataset/view_sampler=evaluation \
+dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json \
+test.save_video=true \
+test.save_image=false \
+test.compute_scores=false
 ```
 
 ### Training
@@ -104,13 +113,14 @@ test.compute_scores=false
 Run the following:
 
 ```bash
-# download the backbone pretrained weight from unimatch and save to 'checkpoints/'
-wget 'https://s3.eu-central-1.amazonaws.com/avg-projects/unimatch/pretrained/gmdepth-scale1-resumeflowthings-scannet-5d9d7964.pth' -P checkpoints
-# train mvsplat
-python -m src.main +experiment=re10k data_loader.train.batch_size=14
+# train lvsm on re10k without vae
+python -m src.main +experiment=re10k dataset.roots=["path to dataset"]
+
+# train lvsm on re10k with vae
+python -m src.main +experiment=re10k_vae dataset.roots=["path to dataset"]
 ```
 
-Our models are trained with a single A100 (80GB) GPU. They can also be trained on multiple GPUs with smaller RAM by setting a smaller `data_loader.train.batch_size` per GPU.
+Our models are trained with a single RTX3080 TI (11GB) GPU.
 
 <details>
   <summary><b>Training on multiple nodes (https://github.com/donydchen/mvsplat/issues/32)</b></summary>
@@ -130,7 +140,7 @@ export NCCL_SOCKET_IFNAME=[YOUR NETWORK INTERFACE]
 export NCCL_IB_GID_INDEX=3
 
 # run the command with 'srun'
-srun python -m src.main +experiment=re10k \
+srun python -m src.main +experiment=re10k dataset.roots=["path to dataset"] \
 data_loader.train.batch_size=4 \
 trainer.num_nodes=2
 ```
@@ -147,27 +157,12 @@ References:
 To fine-tune from the released weights <i>without</i> loading the optimizer states, run the following:
 
 ```bash
-python -m src.main +experiment=re10k data_loader.train.batch_size=14 \
+python -m src.main +experiment=re10k \
 checkpointing.load=checkpoints/re10k.ckpt \
 checkpointing.resume=false
 ```
 
 </details>
-
-### Ablations
-
-We also provide a collection of our [ablation models](https://drive.google.com/drive/folders/14_E_5R6ojOWnLSrSVLVEMHnTiKsfddjU) (under folder 'ablations'). To evaluate them, *e.g.*, the 'base' model, run the following command
-
-```bash
-# Table 3: base
-python -m src.main +experiment=re10k \
-checkpointing.load=checkpoints/ablations/re10k_worefine.ckpt \
-mode=test \
-dataset/view_sampler=evaluation \
-test.compute_scores=true \
-wandb.name=abl/re10k_base \
-model.encoder.wo_depth_refine=true 
-```
 
 ### Cross-Dataset Generalization
 

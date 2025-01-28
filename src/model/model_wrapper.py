@@ -139,7 +139,6 @@ class ModelWrapper(LightningModule):
         self.benchmarker = Benchmarker()
         self.eval_cnt = 0
 
-        # TODO: Still needed?
         if self.test_cfg.compute_scores:
             self.test_step_outputs = {}
             self.time_skip_steps_dict = {"model": 0}
@@ -352,7 +351,7 @@ class ModelWrapper(LightningModule):
         # compute scores
         if self.test_cfg.compute_scores:
             if batch_idx < self.test_cfg.eval_time_skip_steps:
-                self.time_skip_steps_dict["model"] += 1  # TODO: += v?
+                self.time_skip_steps_dict["model"] += 1
 
             rgb = images_prob
 
