@@ -79,12 +79,7 @@ if __name__ == "__main__":
             f.write(compressed_data)
 
         # Update progress bar postfix
-        saved_gb = total_savings_bytes / (1024 ** 3)
-        pbar.set_postfix(
-            path=str(path),
-            saved_GB=f"{saved_gb:.2f}"
-        )
-
-
+        saved_gb = total_savings_bytes / (1024**3)
+        pbar.set_postfix(path=str(path), saved_GB=f"{saved_gb:.2f}")
 
     print(f"\nDone. Compressed dataset saved to {DATASET_OUTPUT}.")

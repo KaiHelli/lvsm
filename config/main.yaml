@@ -2,7 +2,7 @@ defaults:
   - dataset: re10k
   - optional dataset/view_sampler_dataset_specific_config: ${dataset/view_sampler}_${dataset}
   - model@lvsm_cfg: lvsm
-  - loss: [mse] # [mse, lpips] TODO: Make this dependent on VAE used
+  - loss: vis_loss
 
 wandb:
   project: lvsm

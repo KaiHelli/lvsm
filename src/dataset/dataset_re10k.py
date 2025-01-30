@@ -104,14 +104,12 @@ class DatasetRE10k(IterableDataset):
             root = root / self.data_stage
             root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch" or path.suffix == ".bl2"])
 
-
             print(f"Found {len(root_chunks)} chunks in {root}.")
             self.chunks.extend(root_chunks)
-        
+
         self.compressed = any([chunk.suffix == ".bl2" for chunk in self.chunks])
         assert not any(
-            chunk.suffix == (".torch" if self.compressed else ".bl2") 
-            for chunk in self.chunks
+            chunk.suffix == (".torch" if self.compressed else ".bl2") for chunk in self.chunks
         ), "Dataset chunks must be either all compressed or all uncompressed."
 
         print(f"Dataset is {'not ' if not self.compressed else ''}compressed.")

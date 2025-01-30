@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
@@ -85,6 +85,21 @@ class TrainCfg:
     decode_vae_latents: bool
 
 
+@dataclass
+class LossCfg:
+    vis_loss: list[LossCfgWrapper] = field(default_factory=list)
+    vis_loss_weight: float = 0.0
+    latent_loss: list[LossCfgWrapper] = field(default_factory=list)
+    latent_loss_weight: float = 0.0
+    
+    def __post_init__(self):
+        if len(self.vis_loss) > 0:
+            assert self.vis_loss_weight >= 0.0, "vis_loss_weight must be non-negative"
+        if len(self.latent_loss) > 0:
+            assert self.latent_loss_weight >= 0.0, "latent_loss_weight must be non-negative"
+
+        assert len(self.vis_loss) > 0 or len(self.latent_loss) > 0, "At least one loss must be specified"
+
 @runtime_checkable
 class TrajectoryFn(Protocol):
     def __call__(
@@ -109,7 +124,7 @@ class ModelWrapper(LightningModule):
         test_cfg: TestCfg,
         train_cfg: TrainCfg,
         model_cfg: LVSMCfg,
-        loss_cfg: list[LossCfgWrapper],
+        loss_cfg: LossCfg,
         step_tracker: StepTracker | None,
     ) -> None:
         super().__init__()
@@ -126,7 +141,9 @@ class ModelWrapper(LightningModule):
         # Track that the model is not configured yet.
         self.model_configured = False
 
-        self.losses = nn.ModuleList(get_losses(loss_cfg))
+        self.loss_cfg = loss_cfg
+        self.vis_losses = nn.ModuleList(get_losses(loss_cfg.vis_loss))
+        self.latent_losses = nn.ModuleList(get_losses(loss_cfg.latent_loss))
 
         # Track the number of calls to validation_step()
         # self.register_buffer("num_validations", torch.tensor(0, dtype=torch.int64))
@@ -189,55 +206,37 @@ class ModelWrapper(LightningModule):
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
         # Get the right mask
-        attn_mask = self.get_mask(
+        attn_mask = self._get_mask(
             num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
         )
 
         # Run the model.
-        output, output_latent = self(
+        decode_latents = (self.train_cfg.decode_vae_latents or self.val_generated_vis,)
+        vis_pred, latent_pred = self(
             batch["context"]["image"],
             batch["context"]["plucker_rays"],
             batch["target"]["plucker_rays"],
             attn_mask,
             vae_latents=batch["context"].get("vae_latents", None),
-            decode_latents=self.train_cfg.decode_vae_latents or self.val_generated_vis,
+            decode_latents=decode_latents,
         )
 
-        target_gt = batch["target"]["image"]
+        assert vis_pred is not None or not decode_latents, "vis_pred cannot be None if latents are decoded."
+        assert latent_pred is not None or self.model.vae is None, "latent_pred cannot be None if vae is used."
 
         # Output can be None if we don't want to decode the latents.
         # In this case, we don't compute the PSNR metric.
-        if output is not None:
+        if vis_pred is not None:
+            vis_gt = batch["target"]["image"]
+
             # Compute metrics.
             psnr_probabilistic = compute_psnr(
-                rearrange(target_gt, "b v c h w -> (b v) c h w"),
-                rearrange(output, "b v c h w -> (b v) c h w"),
+                rearrange(vis_gt, "b v c h w -> (b v) c h w"),
+                rearrange(vis_pred, "b v c h w -> (b v) c h w"),
             )
             self.log("train/psnr_probabilistic", psnr_probabilistic.mean())
 
-        # If latent space is used, compute metrics for the latent space.
-        if self.model.vae is not None:
-            vae_latents = batch["target"].get("vae_latents", False)
-            if vae_latents:
-                loss_gt = self.model.vae.sample(vae_latents["mean"], vae_latents["std"])
-            else:
-                loss_gt = self.model.vae.encode(target_gt)
-
-            loss_pred = output_latent
-        else:
-            loss_gt = target_gt
-            loss_pred = output
-
-        loss_pred = BatchedViewsRGBD({"color": loss_pred, "depth": None})
-        loss_gt = BatchedViewsRGBD({"color": loss_gt, "depth": None})
-
-        # Compute and log loss.
-        total_loss = 0
-        for loss_fn in self.losses:
-            loss = loss_fn(loss_pred, loss_gt, batch, self.global_step)
-            self.log(f"loss/train/{loss_fn.name}", loss)
-            total_loss = total_loss + loss
-        self.log("loss/train/total", total_loss)
+        total_loss = self._calc_and_log_loss(vis_pred, latent_pred, batch, "train")
 
         # Log the time taken for the step.
         step_time = perf_counter() - step_time_start
@@ -251,7 +250,7 @@ class ModelWrapper(LightningModule):
             comparison_rgb = hcat(
                 add_label(vcat(*batch["context"]["image"][0]), "Context"),
                 add_label(vcat(*batch["target"]["image"][0]), "Target (Ground Truth)"),
-                add_label(vcat(*output[0]), "Target (Predicted)"),
+                add_label(vcat(*vis_pred[0]), "Target (Predicted)"),
             )
             self.logger.log_image(
                 "comparison/train/rgb",
@@ -282,16 +281,19 @@ class ModelWrapper(LightningModule):
                 + f"train"
                 + Fore.RESET
                 + f" | {self.global_step/self.trainer.max_steps*100:>6.2f}% [ep {self.current_epoch} | step {self.global_step}]"
-                f" | time = {step_time:.6f} s"
-                f"| loss = {total_loss:.6f}"
-                f" | scene = {[x[:6] for x in batch['scene']]}"
-                f" | bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
-                f"{batch['context']['far'].detach().cpu().numpy().mean()}]"
-                f" | context = {batch['context']['index'].tolist()}"
-                f" | target = {batch['target']['index'].tolist()}"
+                f" | time = {step_time:.6f}s"
+                f" | loss = {total_loss:.6f}"
+                f" | num_batch = {b}"
+                f" | num_src = {n_src}"
+                f" | num_tgt = {n_tgt}"
+                # f" | scene = {[x[:6] for x in batch['scene']]}"
+                # f" | bound = [{batch['context']['near'].detach().cpu().numpy().mean()} "
+                # f"{batch['context']['far'].detach().cpu().numpy().mean()}]"
+                # f" | context = {batch['context']['index'].tolist()}"
+                # f" | target = {batch['target']['index'].tolist()}"
             )
-        self.log("info/near", batch["context"]["near"].detach().cpu().numpy().mean())
-        self.log("info/far", batch["context"]["far"].detach().cpu().numpy().mean())
+        # self.log("info/near", batch["context"]["near"].detach().cpu().numpy().mean())
+        # self.log("info/far", batch["context"]["far"].detach().cpu().numpy().mean())
         self.log("info/global_step", self.global_step)  # hack for ckpt monitor
 
         # Tell the data loader processes about the current step.
@@ -312,13 +314,13 @@ class ModelWrapper(LightningModule):
         assert b == 1
 
         # Get the right mask
-        attn_mask = self.get_mask(
+        attn_mask = self._get_mask(
             num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
         )
 
         # Run the model.
         with self.benchmarker.time("model"):
-            output, _ = self.model(
+            vis_pred, _ = self.model(
                 batch["context"]["image"],
                 batch["context"]["plucker_rays"],
                 batch["target"]["plucker_rays"],
@@ -326,25 +328,22 @@ class ModelWrapper(LightningModule):
                 vae_latents=batch["context"].get("vae_latents", None),
             )
 
-        # Type the output.
-        output = BatchedViewsRGBD({"color": output, "depth": None})
-
         (scene,) = batch["scene"]
         name = get_cfg()["wandb"]["name"]
         path = self.test_cfg.output_path / name
-        images_prob = output["color"][0]
+        rgb_pred = vis_pred[0]
         rgb_gt = batch["target"]["image"][0]
 
         # Save images.
         if self.test_cfg.save_image:
-            for index, color in zip(batch["target"]["index"][0], images_prob):
+            for index, color in zip(batch["target"]["index"][0], rgb_pred):
                 save_image(color, path / scene / f"color/{index:0>6}.png")
 
         # save video
         if self.test_cfg.save_video:
             frame_str = "_".join([str(x.item()) for x in batch["context"]["index"][0]])
             save_video(
-                [a for a in images_prob],
+                [a for a in rgb_pred],
                 path / "video" / f"{scene}_frame_{frame_str}.mp4",
             )
 
@@ -353,8 +352,6 @@ class ModelWrapper(LightningModule):
             if batch_idx < self.test_cfg.eval_time_skip_steps:
                 self.time_skip_steps_dict["model"] += 1
 
-            rgb = images_prob
-
             if f"psnr" not in self.test_step_outputs:
                 self.test_step_outputs[f"psnr"] = []
             if f"ssim" not in self.test_step_outputs:
@@ -362,9 +359,9 @@ class ModelWrapper(LightningModule):
             if f"lpips" not in self.test_step_outputs:
                 self.test_step_outputs[f"lpips"] = []
 
-            self.test_step_outputs[f"psnr"].append(compute_psnr(rgb_gt, rgb).mean().item())
-            self.test_step_outputs[f"ssim"].append(compute_ssim(rgb_gt, rgb).mean().item())
-            self.test_step_outputs[f"lpips"].append(compute_lpips(rgb_gt, rgb).mean().item())
+            self.test_step_outputs[f"psnr"].append(compute_psnr(rgb_gt, rgb_pred).mean().item())
+            self.test_step_outputs[f"ssim"].append(compute_ssim(rgb_gt, rgb_pred).mean().item())
+            self.test_step_outputs[f"lpips"].append(compute_lpips(rgb_gt, rgb_pred).mean().item())
 
     def on_test_end(self) -> None:
         name = get_cfg()["wandb"]["name"]
@@ -420,12 +417,12 @@ class ModelWrapper(LightningModule):
         assert b == 1
 
         # Get the right mask
-        attn_mask = self.get_mask(
+        attn_mask = self._get_mask(
             num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
         )
 
         # Run the model.
-        output, output_latent = self.model(
+        vis_pred, latent_pred = self.model(
             batch["context"]["image"],
             batch["context"]["plucker_rays"],
             batch["target"]["plucker_rays"],
@@ -433,37 +430,15 @@ class ModelWrapper(LightningModule):
             vae_latents=batch["context"].get("vae_latents", None),
         )
 
-        target_gt = batch["target"]["image"]
+        assert vis_pred is not None, "vis_pred cannot be None."
+        assert latent_pred is not None or self.model.vae is None, "latent_pred cannot be None if vae is used."
 
-        # If latent space is used, compute metrics for the latent space.
-        if self.model.vae is not None:
-            vae_latents = batch["target"].get("vae_latents", False)
-            if vae_latents:
-                loss_gt = self.model.vae.sample(vae_latents["mean"], vae_latents["std"])
-            else:
-                loss_gt = self.model.vae.encode(target_gt)
-
-            loss_pred = output_latent
-        else:
-            loss_gt = target_gt
-            loss_pred = output
-
-        loss_pred = BatchedViewsRGBD({"color": loss_pred, "depth": None})
-        loss_gt = BatchedViewsRGBD({"color": loss_gt, "depth": None})
-
-        # Compute and log loss.
-        total_loss = 0
-        for loss_fn in self.losses:
-            loss = loss_fn(loss_pred, loss_gt, batch, self.global_step)
-            self.log(f"loss/val/{loss_fn.name}", loss)
-            total_loss = total_loss + loss
-        self.log("loss/val/total", total_loss)
-
-        rgb_out = output[0]
+        self._calc_and_log_loss(vis_pred, latent_pred, batch, "val")
 
         # Compute validation metrics.
+        rgb_pred = vis_pred[0]
         rgb_gt = batch["target"]["image"][0]
-        for tag, rgb in zip(("val",), (rgb_out,)):
+        for tag, rgb in zip(("val",), (rgb_pred,)):
             psnr = compute_psnr(rgb_gt, rgb).mean()
             self.log(f"val/psnr_{tag}", psnr)
             lpips = compute_lpips(rgb_gt, rgb).mean()
@@ -480,7 +455,7 @@ class ModelWrapper(LightningModule):
             comparison = hcat(
                 add_label(vcat(*batch["context"]["image"][0]), "Context"),
                 add_label(vcat(*rgb_gt), "Target (Ground Truth)"),
-                add_label(vcat(*rgb_out), "Target (Predicted)"),
+                add_label(vcat(*rgb_pred), "Target (Predicted)"),
             )
 
             self.logger.log_image(
@@ -527,17 +502,17 @@ class ModelWrapper(LightningModule):
                 # )
 
             # Run video validation step.
-            self.render_video_interpolation(batch)
-            self.render_video_wobble(batch)
+            self._render_video_interpolation(batch)
+            self._render_video_wobble(batch)
             if self.train_cfg.extended_visualization:
-                self.render_video_interpolation_exaggerated(batch)
+                self._render_video_interpolation_exaggerated(batch)
 
     @rank_zero_only
     def on_validation_epoch_end(self):
         self.num_validations += 1
 
     @rank_zero_only
-    def render_video_wobble(self, batch: BatchedExample) -> None:
+    def _render_video_wobble(self, batch: BatchedExample) -> None:
         # Two views are needed to get the wobble radius.
         _, v, _, _ = batch["context"]["extrinsics"].shape
 
@@ -557,10 +532,10 @@ class ModelWrapper(LightningModule):
             )
             return extrinsics, intrinsics
 
-        return self.render_video_generic(batch, trajectory_fn, "wobble", num_frames=60)
+        return self._render_video_generic(batch, trajectory_fn, "wobble", num_frames=60)
 
     @rank_zero_only
-    def render_video_interpolation(self, batch: BatchedExample) -> None:
+    def _render_video_interpolation(self, batch: BatchedExample) -> None:
         _, v, _, _ = batch["context"]["extrinsics"].shape
 
         def trajectory_fn(t):
@@ -576,10 +551,10 @@ class ModelWrapper(LightningModule):
             )
             return extrinsics[None], intrinsics[None]
 
-        return self.render_video_generic(batch, trajectory_fn, "rgb")
+        return self._render_video_generic(batch, trajectory_fn, "rgb")
 
     @rank_zero_only
-    def render_video_interpolation_exaggerated(self, batch: BatchedExample) -> None:
+    def _render_video_interpolation_exaggerated(self, batch: BatchedExample) -> None:
         # Two views are needed to get the wobble radius.
         _, v, _, _ = batch["context"]["extrinsics"].shape
 
@@ -605,7 +580,7 @@ class ModelWrapper(LightningModule):
             )
             return extrinsics @ tf, intrinsics[None]
 
-        return self.render_video_generic(
+        return self._render_video_generic(
             batch,
             trajectory_fn,
             "interpolation_exagerrated",
@@ -615,7 +590,7 @@ class ModelWrapper(LightningModule):
         )
 
     @rank_zero_only
-    def render_video_generic(
+    def _render_video_generic(
         self,
         batch: BatchedExample,
         trajectory_fn: TrajectoryFn,
@@ -646,7 +621,7 @@ class ModelWrapper(LightningModule):
         n_tkn_per_view = self.model.get_num_tkn_per_view(h, w)
 
         # Get the right mask
-        attn_mask = self.get_mask(
+        attn_mask = self._get_mask(
             num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
         )
 
@@ -658,14 +633,14 @@ class ModelWrapper(LightningModule):
         outputs = []
         for i in range(num_frame_batches):
             # Run the model batch-wise.
-            output, _ = self.model(
+            vis_pred, _ = self.model(
                 batch["context"]["image"],
                 batch["context"]["plucker_rays"],
                 plucker_rays_batched[:, i],
                 attn_mask,
                 vae_latents=batch["context"].get("vae_latents", None),
             )
-            outputs.append(output)
+            outputs.append(vis_pred)
 
         outputs = torch.cat(outputs, dim=1)
 
@@ -761,7 +736,56 @@ class ModelWrapper(LightningModule):
             },
         }
 
-    def get_mask(self, num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
+    def _calc_and_log_loss(self, vis_pred, latent_pred, batch, stage):
+        assert vis_pred is not None or (
+            vis_pred is None and len(self.vis_losses) == 0
+        ), "vis_pred cannot be None if losses on it are used."
+        assert latent_pred is not None or (
+            latent_pred is None and len(self.latent_losses) == 0
+        ), "latent_pred cannot be None if losses on it are used."
+
+        vis_gt = batch["target"]["image"]
+
+        total_vis_loss = 0
+        total_latent_loss = 0
+
+        if vis_pred is not None:
+            vis_pred_typed = BatchedViewsRGBD({"color": vis_pred, "depth": None})
+            vis_gt_typed = BatchedViewsRGBD({"color": vis_gt, "depth": None})
+
+            # Compute and log loss.
+            for loss_fn in self.vis_losses:
+                loss = loss_fn(vis_pred_typed, vis_gt_typed, batch, self.global_step)
+                self.log(f"loss/{stage}/vis_{loss_fn.name}", loss)
+                total_vis_loss = total_vis_loss + loss
+            self.log(f"loss/{stage}/vis_total", total_vis_loss)
+
+        # If latent space is used, compute metrics for the latent space.
+        if latent_pred is not None:
+            vae_latents = batch["target"].get("vae_latents", False)
+            if vae_latents:
+                latent_gt = self.model.vae.sample(vae_latents["mean"], vae_latents["std"])
+            else:
+                latent_gt = self.model.vae.encode(vis_gt)
+
+            latent_pred_typed = BatchedViewsRGBD({"color": latent_pred, "depth": None})
+            latent_gt_typed = BatchedViewsRGBD({"color": latent_gt, "depth": None})
+
+            for loss_fn in self.latent_losses:
+                loss = loss_fn(latent_pred_typed, latent_gt_typed, batch, self.global_step)
+                self.log(f"loss/{stage}/latent_{loss_fn.name}", loss)
+                total_latent_loss = total_latent_loss + loss
+            self.log(f"loss/{stage}/latent_total", total_latent_loss)
+
+        # Add the latent loss to the total loss.
+        total_loss = (
+            self.loss_cfg.vis_loss_weight * total_vis_loss + self.loss_cfg.latent_loss_weight * total_latent_loss
+        )
+        self.log(f"loss/{stage}/total", total_loss)
+
+        return total_loss
+
+    def _get_mask(self, num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
         use_flex_attn = self.sdpa_kernel == "flex-attention" or (
             self.sdpa_kernel == "auto"
             and torch.cuda.is_available()
@@ -769,13 +793,13 @@ class ModelWrapper(LightningModule):
         )
 
         if use_flex_attn:
-            return ModelWrapper.get_block_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
+            return ModelWrapper._get_block_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
         else:
-            return ModelWrapper.get_full_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
+            return ModelWrapper._get_full_mask(num_src_views, num_tgt_views, num_tkn_per_view, device)
 
     @lru_cache
     @staticmethod
-    def get_block_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
+    def _get_block_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
         num_src_tkn = num_src_views * num_tkn_per_view
 
         total_views = num_src_views + num_tgt_views
@@ -816,7 +840,7 @@ class ModelWrapper(LightningModule):
 
     @lru_cache
     @staticmethod
-    def get_full_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
+    def _get_full_mask(num_src_views: int, num_tgt_views: int, num_tkn_per_view: int, device: torch.device | str):
         seq_len = (num_src_views + num_tgt_views) * num_tkn_per_view
         num_src_tkn = num_src_views * num_tkn_per_view
 

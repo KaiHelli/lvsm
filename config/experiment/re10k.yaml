@@ -2,7 +2,7 @@
 
 defaults:
   - override /dataset: re10k
-  - override /loss: [mse, lpips]
+  - override /loss: vis_loss
   - override /model/vae@lvsm_cfg.vae_cfg: null
   - override /dataset/view_sampler: boundedv2
 
@@ -21,9 +21,10 @@ trainer:
 
 # lpips loss
 loss:
-  lpips:
-    apply_after_step: 0
-    weight: 0.5
+  vis_loss:
+    lpips:
+      apply_after_step: 0
+      weight: 0.5
 
 dataset: 
   image_shape: [192, 192]

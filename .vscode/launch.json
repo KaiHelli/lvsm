@@ -24,7 +24,7 @@
             "console": "integratedTerminal",
             "args": [
                 "+experiment=re10k_vae",
-                "checkpointing.load=checkpoints/re10k_vae.ckpt",
+                "checkpointing.load=checkpoints/8x8-r1-epoch_96-step_100000.ckpt",
                 "mode=test",
                 "dataset/view_sampler=evaluation",
                 "test.compute_scores=true"
@@ -38,7 +38,7 @@
             "console": "integratedTerminal",
             "args": [
                 "+experiment=re10k_vae",
-                "checkpointing.load=checkpoints/re10k_vae.ckpt",
+                "checkpointing.load=checkpoints/8x8-r1-epoch_96-step_100000.ckpt",
                 "mode=test",
                 "dataset/view_sampler=evaluation",
                 "dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json",

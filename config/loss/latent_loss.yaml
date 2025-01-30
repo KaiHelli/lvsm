@@ -1,0 +1,6 @@
+defaults:
+  - loss_fn@vis_loss: []
+  - loss_fn@latent_loss: [mse]
+
+vis_loss_weight: 0.0
+latent_loss_weight: 1.0

@@ -2,7 +2,7 @@
 
 defaults:
   - override /dataset: re10k
-  - override /loss: [mse, lpips]
+  - override /loss: vis_loss
 
 wandb:
   name: dtu/views2
@@ -17,9 +17,10 @@ trainer:
 
 # lpips loss
 loss:
-  lpips:
-    apply_after_step: 0
-    weight: 0.05
+  vis_loss:
+    lpips:
+      apply_after_step: 0
+      weight: 0.05
 
 dataset: 
   image_shape: [192, 192]

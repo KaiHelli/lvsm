@@ -1,0 +1,6 @@
+defaults:
+  - loss_fn@vis_loss: [lpips, mse]
+  - loss_fn@latent_loss: [mse]
+
+vis_loss_weight: 0.5
+latent_loss_weight: 0.5

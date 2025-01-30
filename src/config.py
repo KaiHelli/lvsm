@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from .dataset.data_module import DataLoaderCfg, DatasetCfg
 from .loss import LossCfgWrapper
-from .model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg
+from .model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg, LossCfg
 from .model.transformer import TransformerCfg
 from .model.lvsm import LVSMCfg
 
@@ -44,7 +44,7 @@ class RootCfg:
     optimizer: OptimizerCfg
     checkpointing: CheckpointingCfg
     trainer: TrainerCfg
-    loss: list[LossCfgWrapper]
+    loss: LossCfg
     test: TestCfg
     train: TrainCfg
     seed: int

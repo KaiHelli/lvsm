@@ -2,7 +2,7 @@
 
 defaults:
   - override /dataset: re10k
-  - override /loss: [mse]
+  - override /loss: latent_loss
   - override /model/vae@lvsm_cfg.vae_cfg: sd35
   - override /dataset/view_sampler: boundedv2
 

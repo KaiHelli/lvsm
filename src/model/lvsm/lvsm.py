@@ -184,7 +184,7 @@ class LVSM(torch.nn.Module):
         # If a VAE is used, decode the output
         if self.vae is not None:
             tgt_latent = tgt_img
-            tgt_img = None          
+            tgt_img = None
             if decode_latents:
                 tgt_img = self.vae.decode(tgt_latent).clamp(0, 1)
         else:
