@@ -14,6 +14,7 @@ class VAECfg:
     num_latent_channels: int
     downsample_factor: int
     num_slices_in_parallel: int | None = None
+    stochastic_encoder: bool = True
 
 
 class VAE(torch.nn.Module):
@@ -26,6 +27,7 @@ class VAE(torch.nn.Module):
             num_latent_channels=cfg.num_latent_channels,
             downsample_factor=cfg.downsample_factor,
             num_slices_in_parallel=cfg.num_slices_in_parallel,
+            stochastic_encoder=cfg.stochastic_encoder,
         )
 
     def __init__(
@@ -36,6 +38,7 @@ class VAE(torch.nn.Module):
         num_latent_channels: int,
         downsample_factor: int,
         num_slices_in_parallel: int | None = None,
+        stochastic_encoder: bool = True
     ):
         super().__init__()
 
@@ -60,6 +63,7 @@ class VAE(torch.nn.Module):
         self.num_latent_channels = num_latent_channels
         self.downsample_factor = downsample_factor
         self.num_slices_in_parallel = num_slices_in_parallel
+        self.stochastic_encoder = stochastic_encoder
 
         # Brief test if num_latent_channels and downsample_factor is valid by feeding a zero tensor through the model
         test_input = torch.zeros(
@@ -86,7 +90,7 @@ class VAE(torch.nn.Module):
         if x.ndim == 4:
             latent_dist = self.vae.encode(x, return_dict=False)[0]
             mean, std = latent_dist.mean, latent_dist.std
-            return VAE.sample(mean, std) if sample else (mean, std)
+            return self.sample(mean, std) if sample else (mean, std)
 
         # ----- 5D case -----
         b = x.shape[0]
@@ -117,7 +121,7 @@ class VAE(torch.nn.Module):
         mean = torch.cat(mean_chunks, dim=0)
         std = torch.cat(std_chunks, dim=0)
 
-        return VAE.sample(mean, std) if sample else (mean, std)
+        return self.sample(mean, std) if sample else (mean, std)
 
         # The following causes issues with torch.compile(), so we do it manually above
         # return self.vae.encode(x).latent_dist.sample()
@@ -163,9 +167,11 @@ class VAE(torch.nn.Module):
             out = torch.cat(decoded_chunks, dim=0)
             return out
 
-    @staticmethod
-    def sample(mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
-        return mean + std * torch.randn_like(mean, device=mean.device)
+    def sample(self, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        if self.stochastic_encoder:
+            return mean + std * torch.randn_like(mean, device=mean.device)
+        else:
+            return mean
 
     def get_latent_shape(self, input_shape: tuple[int, int]) -> tuple[int, int]:
         return (
