@@ -211,7 +211,7 @@ class ModelWrapper(LightningModule):
         )
 
         # Run the model.
-        decode_latents = (self.train_cfg.decode_vae_latents or self.val_generated_vis,)
+        decode_latents = self.train_cfg.decode_vae_latents or self.val_generated_vis
         vis_pred, latent_pred = self(
             batch["context"]["image"],
             batch["context"]["plucker_rays"],
