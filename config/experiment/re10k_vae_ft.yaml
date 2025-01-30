@@ -2,7 +2,7 @@
 
 defaults:
   - override /dataset: re10k
-  - override /loss: latent_loss
+  - override /loss: vis_loss
   - override /model/vae@lvsm_cfg.vae_cfg: sd35
   - override /dataset/view_sampler: boundedv2
 
@@ -16,11 +16,11 @@ wandb:
 
 data_loader:
   train:
-    batch_size: 64
+    batch_size: 4
 
 trainer:
-  max_steps: 100_001
-  accumulate_grad_batches: 1
+  max_steps: 20_000
+  accumulate_grad_batches: 16
   log_every_n_steps: 1
 
 dataset: 
@@ -40,13 +40,27 @@ dataset:
     match_random_num_context_views_per_batch: True
     min_context_views: 2
     max_context_views: 8
-    max_context_views_warm_up_steps: 60_000
+    max_context_views_warm_up_steps: 10_000
     extra_views_sampling_strategy: farthest_point
 
 train:
-  decode_vae_latents: false
-  finetune_vae_decoder: null
+  decode_vae_latents: true
+  finetune_vae_decoder: 
+    layer_config:
+      Linear:
+        weight:
+          lora_rank: 8
+          lora_dropout_p: 0.0
+          lora_alpha: 2.0
+      Conv2d:
+        weight:
+          lora_rank: 8
+          lora_dropout_p: 0.0
+          lora_alpha: 2.0
 
 test:
   eval_time_skip_steps: 5
   compute_scores: true
+
+checkpointing:
+  resume: false

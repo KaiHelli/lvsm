@@ -44,7 +44,8 @@ from ..visualization import layout
 from ..visualization.p3d_visualize_scene import visualize_scene
 
 from .transformer.norm import LayerNorm, LayerNorm2d, QKScaleUp, QKNorm
-from .vae import VAE
+from .lora.lora import add_lora, LoRAConfig
+from .lora.lora_utils import get_lora_params
 from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
 import plotly.io as pio
@@ -83,6 +84,7 @@ class TrainCfg:
     val_every_n_batches: int
     vis_every_n_validations: int
     decode_vae_latents: bool
+    finetune_vae_decoder: Optional[LoRAConfig]
 
 
 @dataclass
@@ -91,7 +93,7 @@ class LossCfg:
     vis_loss_weight: float = 0.0
     latent_loss: list[LossCfgWrapper] = field(default_factory=list)
     latent_loss_weight: float = 0.0
-    
+
     def __post_init__(self):
         if len(self.vis_loss) > 0:
             assert self.vis_loss_weight >= 0.0, "vis_loss_weight must be non-negative"
@@ -99,6 +101,7 @@ class LossCfg:
             assert self.latent_loss_weight >= 0.0, "latent_loss_weight must be non-negative"
 
         assert len(self.vis_loss) > 0 or len(self.latent_loss) > 0, "At least one loss must be specified"
+
 
 @runtime_checkable
 class TrajectoryFn(Protocol):
@@ -167,27 +170,68 @@ class ModelWrapper(LightningModule):
         self.model = LVSM.from_cfg(self.model_cfg)
         self.data_shim = get_data_shim(self.model)
 
+        self.vae_decoder_requires_grad = False
+
+        if self.model.vae is not None and self.train_cfg.finetune_vae_decoder is not None:
+            assert self.train_cfg.decode_vae_latents, "Finetuning the VAE decoder requires decoding the latents."
+
+            self.vae_decoder_requires_grad = True
+
+            def enable_lora_finetuning(module, incompatible_keys):
+                print("Finetuning the VAE decoder with LoRA.")
+
+                # Add LoRA params to the VAE decoder.
+                add_lora(module.vae.vae.decoder, self.train_cfg.finetune_vae_decoder)
+
+                # First freeze all parameters of the model.
+                module.requires_grad_(False)
+
+                # Enable gradients for all added LoRA parameters.
+                for param in get_lora_params(module.vae.vae.decoder):
+                    param.requires_grad_(True)
+
+                # Set all to eval mode first.
+                module.eval()
+
+                # Set the decoder to train mode
+                module.vae.vae.decoder.train()
+
+                # Print all parameters that are not frozen.
+                ft_params = [name for name, param in module.named_parameters() if param.requires_grad]
+                print("Finetuning the following parameters:", ft_params)
+
+                # Print all modules in train mode:
+                # train_modules = [name for name, mod in module.named_modules() if mod.training]
+                # print("Modules in train mode:", train_modules)
+
+            self.model.register_load_state_dict_post_hook(enable_lora_finetuning)
+
         # Compile the model to achieve some speedup.
         # For now only compile if a GPU is available.
         if torch.cuda.is_available():
             print("Using torch.compile() to speed up model.")
             self.model = torch.compile(self.model, fullgraph=True)
 
-        # In case the model is not compiled, but the loaded state_dict is from a compiled model, we need to adjust the checkpoint.
         def patch_compiled(
             module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         ):
+            """
+            A pre-hook to fix or rename parameters before PyTorch performs strict matching.
+            Removes '_orig_mod.' prefixes for parameters from compiled checkpoints when loaded on uncompiled models.
+            """
             from torch._dynamo import OptimizedModule
 
+            # Remove Dynamo/compiled '_orig_mod.' prefixes if needed
             if not isinstance(module, OptimizedModule):
-                # The model is not compiled. Might need to adjust the state_dict.
                 unwanted_prefix = "_orig_mod."
                 unwanted_match = prefix + unwanted_prefix
-                for k, v in list(state_dict.items()):
-                    if k.startswith(unwanted_match):
-                        new_k = k.replace(unwanted_match, prefix, 1)
-                        state_dict[new_k] = state_dict.pop(k)
-                        print(f"Renamed param: {k} -> {new_k}")
+
+                for old_key in list(state_dict.keys()):
+                    # If a key starts with e.g. "model._orig_mod." but we want "model."
+                    if old_key.startswith(unwanted_match):
+                        new_key = old_key.replace(unwanted_match, prefix, 1)
+                        state_dict[new_key] = state_dict.pop(old_key)
+                        print(f"[load_state_dict_pre_hook] Renamed from compiled checkpoint: {old_key} -> {new_key}")
 
         self.model.register_load_state_dict_pre_hook(patch_compiled)
 
@@ -219,6 +263,7 @@ class ModelWrapper(LightningModule):
             attn_mask,
             vae_latents=batch["context"].get("vae_latents", None),
             decode_latents=decode_latents,
+            decoder_requires_grad=self.vae_decoder_requires_grad,
         )
 
         assert vis_pred is not None or not decode_latents, "vis_pred cannot be None if latents are decoded."
@@ -691,11 +736,17 @@ class ModelWrapper(LightningModule):
             for param_name, param in module.named_parameters():
                 full_param_name = f"{module_name}.{param_name}" if module_name else param_name
 
-                if param_name.endswith("bias"):
+                # Handle parametrizations
+                if param_name.startswith("parametrizations"):
+                    param_type = param_name.split(".")[1]
+                else:
+                    param_type = param_name
+
+                if param_type.endswith("bias"):
                     no_decay.add(full_param_name)
-                elif param_name == "weight" and isinstance(module, whitelist_weight_modules):
+                elif param_type == "weight" and isinstance(module, whitelist_weight_modules):
                     decay.add(full_param_name)
-                elif param_name == "weight" and isinstance(module, blacklist_weight_modules):
+                elif param_type == "weight" and isinstance(module, blacklist_weight_modules):
                     no_decay.add(full_param_name)
 
         # validate that we considered every parameter

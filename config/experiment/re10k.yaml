@@ -37,7 +37,7 @@ dataset:
   sort_context_index: true 
   view_sampler:
     target_views_replace_sample: false
-    num_context_views: 2  # Only relevant for the test stage, as we are sampling randomly below
+    num_context_views: 2
     num_target_views: 6
     random_num_context_views: False
     match_random_num_context_views_per_batch: False

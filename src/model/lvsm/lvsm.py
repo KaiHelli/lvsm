@@ -118,7 +118,9 @@ class LVSM(torch.nn.Module):
         self.norm_in = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
         self.norm_out = LayerNorm(transformer_cfg.d_model, bias=transformer_cfg.bias)
 
-    def forward(self, src_img, src_rays, tgt_rays, attn_mask, vae_latents=None, decode_latents=True):
+    def forward(
+        self, src_img, src_rays, tgt_rays, attn_mask, vae_latents=None, decode_latents=True, decoder_requires_grad=False
+    ):
         # If a VAE is used, encode the source image and downsample the rays
         if self.vae is not None:
             b = src_img.shape[0]
@@ -186,7 +188,7 @@ class LVSM(torch.nn.Module):
             tgt_latent = tgt_img
             tgt_img = None
             if decode_latents:
-                tgt_img = self.vae.decode(tgt_latent).clamp(0, 1)
+                tgt_img = self.vae.decode(tgt_latent, decoder_requires_grad).clamp(0, 1)
         else:
             tgt_latent = None
             # Map the output to [0, 1] for RGB output

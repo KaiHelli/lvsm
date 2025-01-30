@@ -122,42 +122,46 @@ class VAE(torch.nn.Module):
         # The following causes issues with torch.compile(), so we do it manually above
         # return self.vae.encode(x).latent_dist.sample()
 
-    @torch.no_grad()
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
+    def decode(self, z: torch.Tensor, requires_grad: bool = False) -> torch.Tensor:
         """
         Decode latents back to image space.
         If `z` is 4D (B, C, H, W), decode directly.
         If `z` is 5D ((B1 B2), N, C, H, W), slice along
         the batch dimension for parallel processing.
         """
-        # ----- 4D case -----
-        if z.ndim == 4:
-            return self.vae.decode(z, return_dict=False)[0]
+        # Allow outer scope to take precedence over requires_grad using e.g. torch.no_grad() contexts
+        # Useful e.g. for evaluation where gradients are not needed
+        requires_grad = torch.is_grad_enabled() and requires_grad
 
-        # ----- 5D case -----
-        b = z.shape[0]
-        # If num_slices_in_parallel is None, process everything at once (chunk_size = b)
-        chunk_size = b if self.num_slices_in_parallel is None else self.num_slices_in_parallel
+        with torch.set_grad_enabled(requires_grad):
+            # ----- 4D case -----
+            if z.ndim == 4:
+                return self.vae.decode(z, return_dict=False)[0]
 
-        # Split along the batch dimension into chunks of size `chunk_size`
-        z_chunks = torch.split(z, split_size_or_sections=chunk_size, dim=0)
+            # ----- 5D case -----
+            b = z.shape[0]
+            # If num_slices_in_parallel is None, process everything at once (chunk_size = b)
+            chunk_size = b if self.num_slices_in_parallel is None else self.num_slices_in_parallel
 
-        decoded_chunks = []
-        for chunk in z_chunks:
-            # chunk: [chunk_b, n, c, h, w]
-            chunk_b = chunk.shape[0]
+            # Split along the batch dimension into chunks of size `chunk_size`
+            z_chunks = torch.split(z, split_size_or_sections=chunk_size, dim=0)
 
-            # Flatten the first two dimensions for VAE: [chunk_b*n, c, h, w]
-            chunk = rearrange(chunk, "b n c h w -> (b n) c h w")
+            decoded_chunks = []
+            for chunk in z_chunks:
+                # chunk: [chunk_b, n, c, h, w]
+                chunk_b = chunk.shape[0]
 
-            decoded = self.vae.decode(chunk, return_dict=False)[0]
+                # Flatten the first two dimensions for VAE: [chunk_b*n, c, h, w]
+                chunk = rearrange(chunk, "b n c h w -> (b n) c h w")
 
-            # Reshape back to 5D: [chunk_b, n, c, h, w]
-            decoded = rearrange(decoded, "(b n) c h w -> b n c h w", b=chunk_b)
-            decoded_chunks.append(decoded)
+                decoded = self.vae.decode(chunk, return_dict=False)[0]
 
-        out = torch.cat(decoded_chunks, dim=0)
-        return out
+                # Reshape back to 5D: [chunk_b, n, c, h, w]
+                decoded = rearrange(decoded, "(b n) c h w -> b n c h w", b=chunk_b)
+                decoded_chunks.append(decoded)
+
+            out = torch.cat(decoded_chunks, dim=0)
+            return out
 
     @staticmethod
     def sample(mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
