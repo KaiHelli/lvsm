@@ -4,4 +4,4 @@ hf_gated: false
 num_latent_channels: 4
 downsample_factor: 8
 num_slices_in_parallel: 4  # null means all slices in parallel
-stochastic_encoder: false
+stochastic_encoder: true
