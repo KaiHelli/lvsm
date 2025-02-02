@@ -75,6 +75,7 @@ class TestCfg:
     save_image: bool
     save_video: bool
     eval_time_skip_steps: int
+    ffmpeg_path: Path
 
 
 @dataclass
@@ -432,6 +433,29 @@ class ModelWrapper(LightningModule):
 
         assert b == 1
 
+        # Split along the batch dimension into chunks of size `chunk_size`
+        # target_chunks = torch.split(batch["target"]["plucker_rays"], split_size_or_sections=90, dim=1)
+
+        # predicted_chunks = []
+        # for chunk in target_chunks:
+        #    n_chunk_tgt = chunk.shape[1]
+
+        #    attn_mask = self._get_mask(
+        #        num_src_views=n_src, num_tgt_views=n_chunk_tgt, num_tkn_per_view=n_tkn_per_view, device=device
+        #    )
+
+        #    vis_pred, _ = self.model(
+        #        batch["context"]["image"],
+        #        batch["context"]["plucker_rays"],
+        #        chunk,
+        #        attn_mask,
+        #        vae_latents=batch["context"].get("vae_latents", None),
+        #    )
+
+        #    predicted_chunks.append(vis_pred)
+
+        # vis_pred = torch.cat(predicted_chunks, dim=1)
+
         # Get the right mask
         attn_mask = self._get_mask(
             num_src_views=n_src, num_tgt_views=n_tgt, num_tkn_per_view=n_tkn_per_view, device=device
@@ -455,8 +479,14 @@ class ModelWrapper(LightningModule):
 
         # Save images.
         if self.test_cfg.save_image:
+            for index, color in zip(batch["context"]["index"][0], batch["context"]["image"][0]):
+                save_image(color, path / scene / f"color/src_{index:0>6}.png")
+
             for index, color in zip(batch["target"]["index"][0], rgb_pred):
-                save_image(color, path / scene / f"color/{index:0>6}.png")
+                save_image(color, path / scene / f"color/tgt_{index:0>6}.png")
+
+            for index, color in zip(batch["target"]["index"][0], batch["target"]["image"][0]):
+                save_image(color, path / scene / f"color/gt_{index:0>6}.png")
 
         # save video
         if self.test_cfg.save_video:
@@ -464,6 +494,7 @@ class ModelWrapper(LightningModule):
             save_video(
                 [a for a in rgb_pred],
                 path / "video" / f"{scene}_frame_{frame_str}.mp4",
+                ffmpeg_path=self.test_cfg.ffmpeg_path,
             )
 
         # compute scores

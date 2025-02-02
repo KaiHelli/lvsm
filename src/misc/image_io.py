@@ -1,7 +1,8 @@
 import io
 from pathlib import Path
 from typing import Union
-import skvideo.io
+import imageio
+import os
 
 import numpy as np
 import torch
@@ -75,22 +76,48 @@ def load_image(
 
 
 def save_video(
-    images: list[FloatImage],
-    path: Union[Path, str],
+    images: list[FloatImage], path: Union[Path, str], ffmpeg_path: Union[Path, str] = "/usr/local/bin/"
 ) -> None:
-    """Save an image. Assumed to be in range 0-1."""
+    """Save a video from a list of images (assumed to be in range 0-1) using ImageIO.
 
+    Parameters:
+        images: List of images as tensors.
+        path: Output video file path.
+        ffmpeg_path: Directory or full path to the ffmpeg executable.
+    """
     # Create the parent directory if it doesn't already exist.
     path = Path(path)
     path.parent.mkdir(exist_ok=True, parents=True)
 
-    # Save the image.
-    # Image.fromarray(prep_image(image)).save(path)
-    frames = []
-    for image in images:
-        frames.append(prep_image(image))
+    # Prepare frames.
+    frames = [prep_image(image) for image in images]
 
-    writer = skvideo.io.FFmpegWriter(path, outputdict={"-pix_fmt": "yuv420p", "-crf": "21", "-vf": f"setpts=1.*PTS"})
-    for frame in frames:
-        writer.writeFrame(frame)
-    writer.close()
+    # Set ffmpeg executable for imageio_ffmpeg.
+    # If ffmpeg_path is a directory, assume the executable is named "ffmpeg" inside it.
+    ffmpeg_exe = Path(ffmpeg_path)
+    if ffmpeg_exe.is_dir():
+        ffmpeg_exe = ffmpeg_exe / "ffmpeg"
+    print(f"Using ffmpeg at {ffmpeg_exe}")
+
+    # Set the IMAGEIO_FFMPEG_EXE environment variable to force using a specific ffmpeg executable.
+    os.environ["IMAGEIO_FFMPEG_EXE"] = str(ffmpeg_exe)
+
+    # Write video using imageio.
+    # Note: fps=30 is passed to imageio, and we add "-framerate 30" to inform FFmpeg about the input.
+    with imageio.get_writer(
+        str(path),
+        fps=30,
+        codec="libx264",
+        ffmpeg_params=[
+            "-r",
+            "30",
+            # Remove the explicit pix_fmt option to avoid duplicate settings:
+            # "-pix_fmt", "yuv420p",
+            "-crf",
+            "21",
+            "-vf",
+            "setpts=1.*PTS",
+        ],
+    ) as writer:
+        for frame in frames:
+            writer.append_data(frame)

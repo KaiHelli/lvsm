@@ -43,7 +43,7 @@
                 "dataset/view_sampler=evaluation",
                 "dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json",
                 "test.save_video=true",
-                "test.save_image=false",
+                "test.save_image=true",
                 "test.compute_scores=false",
             ],
         },

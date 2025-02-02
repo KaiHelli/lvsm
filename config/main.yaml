@@ -65,6 +65,7 @@ test:
   eval_time_skip_steps: 0
   save_image: true
   save_video: false
+  ffmpeg_path: /usr/local/bin
 
 seed: 111123
 
