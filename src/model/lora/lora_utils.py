@@ -32,6 +32,12 @@ def name_is_lora(name):
     )
 
 
+def name_is_orig(name):
+    return (
+        len(name.split(".")) >= 3 and (name.split(".")[-3]) == "parametrizations" and name.split(".")[-1] == "original"
+    )
+
+
 def name_is_bias(name):
     return name.split(".")[-1] == "bias"
 
@@ -44,6 +50,10 @@ def get_params_by_name(model, print_shapes=False, name_filter=None):
             yield p
 
 
+def get_lora_original_params(model, print_shapes=False):
+    return get_params_by_name(model, print_shapes=print_shapes, name_filter=name_is_orig)
+
+
 def get_lora_params(model, print_shapes=False):
     return get_params_by_name(model, print_shapes=print_shapes, name_filter=name_is_lora)
 
@@ -54,6 +64,10 @@ def get_bias_params(model, print_shapes=False):
 
 def get_lora_state_dict(model):
     return {k: v for k, v in model.state_dict().items() if name_is_lora(k)}
+
+
+def get_lora_original_state_dict(model):
+    return {k: v for k, v in model.state_dict().items() if name_is_orig(k)}
 
 
 # ------------------- helper function for inferencing with multiple lora -------------------

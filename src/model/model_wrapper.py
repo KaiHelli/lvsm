@@ -45,7 +45,7 @@ from ..visualization.p3d_visualize_scene import visualize_scene
 
 from .transformer.norm import LayerNorm, LayerNorm2d, QKScaleUp, QKNorm
 from .lora.lora import add_lora, LoRAConfig
-from .lora.lora_utils import get_lora_params
+from .lora.lora_utils import get_lora_params, get_lora_state_dict, get_lora_original_state_dict
 from .lvsm import LVSM, LVSMCfg
 from .lr_scheduler import WarmupCosineLR
 import plotly.io as pio
@@ -177,7 +177,7 @@ class ModelWrapper(LightningModule):
 
             self.vae_decoder_requires_grad = True
 
-            def enable_lora_finetuning(module, incompatible_keys):
+            def enable_lora_finetuning(module):
                 print("Finetuning the VAE decoder with LoRA.")
 
                 # Add LoRA params to the VAE decoder.
@@ -204,7 +204,7 @@ class ModelWrapper(LightningModule):
                 # train_modules = [name for name, mod in module.named_modules() if mod.training]
                 # print("Modules in train mode:", train_modules)
 
-            self.model.register_load_state_dict_post_hook(enable_lora_finetuning)
+            enable_lora_finetuning(self.model)
 
         # Compile the model to achieve some speedup.
         # For now only compile if a GPU is available.
@@ -212,14 +212,22 @@ class ModelWrapper(LightningModule):
             print("Using torch.compile() to speed up model.")
             self.model = torch.compile(self.model, fullgraph=True)
 
-        def patch_compiled(
+        def patch_state_dict(
             module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         ):
             """
             A pre-hook to fix or rename parameters before PyTorch performs strict matching.
             Removes '_orig_mod.' prefixes for parameters from compiled checkpoints when loaded on uncompiled models.
+            Adds '_orig_mod.' prefixes for parameters from uncompiled checkpoints when loaded on compiled models.
             """
             from torch._dynamo import OptimizedModule
+
+            is_lvsm = (isinstance(module, OptimizedModule) and isinstance(module._orig_mod, LVSM)) or isinstance(
+                module, LVSM
+            )
+
+            if not is_lvsm:
+                return
 
             # Remove Dynamo/compiled '_orig_mod.' prefixes if needed
             if not isinstance(module, OptimizedModule):
@@ -233,7 +241,73 @@ class ModelWrapper(LightningModule):
                         state_dict[new_key] = state_dict.pop(old_key)
                         print(f"[load_state_dict_pre_hook] Renamed from compiled checkpoint: {old_key} -> {new_key}")
 
-        self.model.register_load_state_dict_pre_hook(patch_compiled)
+            # Add Dynamo/compiled '_orig_mod.' prefixes if needed
+            if isinstance(module, OptimizedModule):
+                wanted_prefix = "_orig_mod."
+                wanted_match = prefix + wanted_prefix
+
+                print(f"{prefix=}, {wanted_match=}")
+
+                for old_key in list(state_dict.keys()):
+                    # Otherwise, insert "_orig_mod." right after "model."
+                    if old_key.startswith(prefix) and not old_key.startswith(wanted_match):
+                        new_key = old_key.replace(prefix, prefix + wanted_prefix, 1)
+                        state_dict[new_key] = state_dict.pop(old_key)
+                        print(f"[load_state_dict_pre_hook] Renamed from uncompiled checkpoint: {old_key} -> {new_key}")
+
+            # In case we load a checkpoint that was saved without LoRA parametrization, we need to match the keys.
+            if self.train_cfg.finetune_vae_decoder:
+                lora_params = get_lora_original_state_dict(module)
+
+                for key in lora_params:
+                    if key in state_dict:
+                        continue
+
+                    full_key = prefix + key
+                    split = full_key.split(".")
+                    key_without_lora = ".".join(split[:-3]) + "." + split[-2]
+                    if key_without_lora in state_dict:
+                        state_dict[full_key] = state_dict.pop(key_without_lora)
+                        print(
+                            f"[load_state_dict_pre_hook] Matched missing LoRA key with unexpected key: {key_without_lora} -> {full_key}"
+                        )
+
+        def ignore_lora_keys(module, incompatible_keys):
+            """
+            A post-hook to ignore LoRA parameters that are not present in the checkpoint.
+            This makes it possible to load checkpoints that were saved without LoRA parametrization in order to finetune parts of the model.
+            """
+            from torch._dynamo import OptimizedModule
+
+            is_lvsm = (isinstance(module, OptimizedModule) and isinstance(module._orig_mod, LVSM)) or isinstance(
+                module, LVSM
+            )
+
+            if not is_lvsm:
+                return
+
+            from torch._dynamo import OptimizedModule
+
+            lora_params = get_lora_state_dict(module)
+            compiled = isinstance(module, OptimizedModule)
+            num_prefixes = 2 if compiled else 1
+            missing_keys = incompatible_keys.missing_keys
+            # Go in reverse order to avoid changing the indices of the keys.
+            for i in range(len(missing_keys) - 1, -1, -1):
+                if missing_keys[i].split(".", num_prefixes)[-1] in lora_params:
+                    key = missing_keys.pop(i)
+                    print(f"[load_state_dict_post_hook] Ignored missing LoRA key: {key}")
+
+            # Workaround for old checkpoints that still had lora_dropout_mask
+
+            unexpected_keys = incompatible_keys.unexpected_keys
+            for i in range(len(unexpected_keys) - 1, -1, -1):
+                if unexpected_keys[i].endswith("lora_dropout_mask"):
+                    key = unexpected_keys.pop(i)
+                    print(f"[load_state_dict_post_hook] Ignored unexpected LoRA key: {key}")
+
+        self.model.register_load_state_dict_pre_hook(patch_state_dict)
+        self.model.register_load_state_dict_post_hook(ignore_lora_keys)
 
         # Subsequent calls to configure_model() will be ignored.
         self.model_configured = True

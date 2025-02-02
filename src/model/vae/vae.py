@@ -38,7 +38,7 @@ class VAE(torch.nn.Module):
         num_latent_channels: int,
         downsample_factor: int,
         num_slices_in_parallel: int | None = None,
-        stochastic_encoder: bool = True
+        stochastic_encoder: bool = True,
     ):
         super().__init__()
 

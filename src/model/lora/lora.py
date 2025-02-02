@@ -68,7 +68,9 @@ class LoRAParametrization(nn.Module):
 
         # We'll store a dropout mask of shape (1, fan_in) or (fan_in, 1), then broadcast
         # across the entire LoRA A matrix.
-        self.register_buffer("lora_dropout_mask", torch.ones(self.swap((1, fan_in)), dtype=self.lora_A.dtype))
+        self.register_buffer(
+            "lora_dropout_mask", torch.ones(self.swap((1, fan_in)), dtype=self.lora_A.dtype), persistent=False
+        )
 
         # We define how to forward: can be disabled or enabled at runtime.
         self.forward_fn = self.lora_forward
