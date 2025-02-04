@@ -42,7 +42,7 @@ pip install -r requirements_nightly.txt
 
 LVSM uses RealEstate10K for scene-level experiments as well as Objaverse for object-level datasets. This repository only builds upon the scene-level dataset RealEstate10K. Adding support for Objaverse might be added at a later point.
 
-### RealEstate10K and ACID
+### RealEstate10K
 
 As this repository builds upon MVSplat, it supports the same datasets as pixelSplat. Below we quote pixelSplat's [detailed instructions](https://github.com/dcharatan/pixelsplat?tab=readme-ov-file#acquiring-datasets) on getting datasets.
 
@@ -50,11 +50,15 @@ As this repository builds upon MVSplat, it supports the same datasets as pixelSp
 
 > If you would like to convert downloaded versions of the Real Estate 10k and ACID datasets to our format, you can use the [scripts here](https://github.com/dcharatan/real_estate_10k_tools). Reach out to us (pixelSplat) if you want the full versions of our processed datasets, which are about 500 GB and 160 GB for Real Estate 10k and ACID respectively.
 
-### DTU (For Testing Only)
+In order to allow for preprocessing such as VAE pre-encoding or image scaling, we encode some meta information for a saved dataset. After extracting RealEstate10K, create `meta.json` in the root dataset directory with the following contents:
 
-* Download the preprocessed DTU data [dtu_training.rar](https://drive.google.com/file/d/1eDjh-_bxKKnEuz5h-HXS7EDJn59clx6V/view).
-* Convert DTU to chunks by running `python src/scripts/convert_dtu.py --input_dir PATH_TO_DTU --output_dir datasets/dtu`
-* [Optional] Generate the evaluation index by running `python src/scripts/generate_dtu_evaluation_index.py --n_contexts=N`, where N is the number of context views. (For N=2 and N=3, we have already provided our tested version under `/assets`.)
+```json
+{
+    "expected_shape": [3, 360, 640]
+}
+```
+
+For rescaling, pre-encoding and compressing the dataset, see the scripts `src/scripts/preprocess_dataset.py`as well as `src/scripts/compress_dataset.py`.
 
 ## Running the Code
 
@@ -62,7 +66,7 @@ As this repository builds upon MVSplat, it supports the same datasets as pixelSp
 
 To render novel views and compute evaluation metrics from a pretrained model,
 
-* get the [pretrained models](TODO), and save them to `/checkpoints`
+* get the [pretrained models](https://drive.google.com/drive/folders/1-CiI4o2CyfFF8VX3biroksxE-Wr5lJcI?usp=sharing), and save them to `/checkpoints`
 
 * run the following:
 
@@ -108,6 +112,8 @@ test.save_image=false \
 test.compute_scores=false
 ```
 
+To reproduce the results of our work, see `experiments.md` as well as `evaluation.ipynb`.
+
 ### Training
 
 Run the following:
@@ -124,7 +130,7 @@ Our models are trained with a single RTX3080 TI (11GB) GPU.
 
 <details>
   <summary><b>Training on multiple nodes (https://github.com/donydchen/mvsplat/issues/32)</b></summary>
-Since this project is built on top of pytorch_lightning, it can be trained on multiple nodes hosted on the SLURM cluster. For example, to train on 2 nodes (with 2 GPUs on each node), add the following lines to the SLURM job script
+Since this project is built on top of pytorch_lightning, it can be trained on multiple nodes hosted on the SLURM cluster. For example, to train on 2 nodes (with 2 GPUs on each node), add the following lines to the SLURM job script. Note however, this is untested in the current version of the code.
 
 ```bash
 #SBATCH --nodes=2           # should match with trainer.num_nodes
@@ -164,22 +170,6 @@ checkpointing.resume=false
 
 </details>
 
-### Cross-Dataset Generalization
-
-We use the default model trained on RealEstate10K to conduct cross-dataset evaluations. To evaluate them, *e.g.*, on DTU, run the following command
-
-```bash
-# Table 2: RealEstate10K -> DTU
-python -m src.main +experiment=dtu \
-checkpointing.load=checkpoints/re10k.ckpt \
-mode=test \
-dataset/view_sampler=evaluation \
-dataset.view_sampler.index_path=assets/evaluation_index_dtu_nctx2.json \
-test.compute_scores=true
-```
-
-**More running commands can be found at [more_commands.sh](more_commands.sh).**
-
 ## BibTeX
 
 ```bibtex
@@ -196,4 +186,4 @@ test.compute_scores=true
 
 ## Acknowledgements
 
-This project builds upon the paper [LVSM](https://haian-jin.github.io/projects/LVSM/). The code is largely based on [MVSplat](https://github.com/donydchen/mvsplat). Many thanks to these projects for their excellent contributions!
+This project builds upon the paper [LVSM](https://haian-jin.github.io/projects/LVSM/). The code is largely based on [MVSplat](https://github.com/donydchen/mvsplat) with the multi-view view sampler provided by [DepthSplat](https://github.com/cvg/depthsplat) and [latentSplat](https://github.com/Chrixtar/latentsplat). Many thanks to these projects for their excellent contributions!

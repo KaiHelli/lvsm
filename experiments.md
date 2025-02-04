@@ -31,16 +31,16 @@ lpips 0.12137643914473684
 ### Full res. run - [wandb](https://wandb.ai/tum-edu/lvsm/runs/44x9llvm)
 Description: Finetuned from the old 11day training model `full_run_epoch_96-step_100000.ckpt`
 
-Filename: `full_run_ft_epoch_96-step_100000.ckpt`
+Filename: `lvsm_base_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt
 ```
 
 
 ```bash
 # Export videos and images
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json test.compute_scores=false test.save_video=true test.save_image=true lvsm_cfg.transformer_cfg.sdpa_kernel=flex-attention checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt test.ffmpeg_path=/home/team15/ffmpeg-7.0.2-amd64-static
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json test.compute_scores=false test.save_video=true test.save_image=true lvsm_cfg.transformer_cfg.sdpa_kernel=flex-attention checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt test.ffmpeg_path=/home/team15/ffmpeg-7.0.2-amd64-static
 ```
 
 **Results:**
@@ -52,13 +52,13 @@ lpips 0.10847553453947369
 
 **Multi-View Experiment:**
 ```bash
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_2.json
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_3.json
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_4.json
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_5.json
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_6.json
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_7.json
-python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/full_run_ft_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_8.json
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_2.json
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_3.json
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_4.json
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_5.json
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_6.json
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_7.json
+python -m src.main +experiment=re10k  mode=test dataset/view_sampler=evaluation test.compute_scores=true lvsm_cfg.transformer_cfg.sdpa_kernel=torch-sdpa checkpointing.load=checkpoints/lvsm_base_epoch_96-step_100000.ckpt dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_8.json
 ```
 
 ```
@@ -71,10 +71,10 @@ lpips_a = [0.15422289299242425, 0.14604048295454544, 0.1376657196969697, 0.13624
 
 
 ### 8x8 run 1 - [wandb](https://wandb.ai/tum-edu/lvsm/runs/g1pj4x1v)
-Filename: `8x8-r1-epoch_96-step_100000.ckpt`
+Filename: `lvsm_vae_8x8_r1_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/8x8-r1-epoch_96-step_100000.ckpt 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_8x8_r1_epoch_96-step_100000.ckpt 
 ```
 
 **Results:**
@@ -87,10 +87,10 @@ lpips 0.3643863075657895
 ### 8x8 run 2 - [wandb](https://wandb.ai/tum-edu/lvsm/runs/751eglvk)
 Description: Finetuning based on 8x8 run 1 for another 100_000 steps.
 
-Filename: `8x8-r2-epoch_96-step_100000.ckpt`
+Filename: `lvsm_vae_8x8_r2_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/8x8-r2-epoch_96-step_100000.ckpt 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_8x8_r2_epoch_96-step_100000.ckpt 
 ```
 
 **Results:**
@@ -101,10 +101,10 @@ lpips 0.3643863075657895
 ```
 
 ### 24x24 run 1 - [wandb](https://wandb.ai/tum-edu/lvsm/runs/da6vp79n)
-Filename: `24x24-r1-epoch_96-step_100000.ckpt`
+Filename: `lvsm_vae_24x24_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/24x24-r1-epoch_96-step_100000.ckpt lvsm_cfg.patch_size=24 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_24x24_epoch_96-step_100000.ckpt lvsm_cfg.patch_size=24 
 ```
 
 **Results:**
@@ -115,10 +115,10 @@ lpips 0.5971422697368421
 ```
 
 ### 6x6 run 1 - [wandb](https://wandb.ai/tum-edu/lvsm/runs/4rgpow2c)
-Filename: `6x6-r1-epoch_96-step_100000.ckpt`
+Filename: `lvsm_vae_6x6_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/6x6-r1-epoch_96-step_100000.ckpt lvsm_cfg.patch_size=6 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_6x6_epoch_96-step_100000.ckpt lvsm_cfg.patch_size=6 
 ```
 
 **Results:**
@@ -129,10 +129,10 @@ lpips 0.29425370065789475
 ```
 
 ### 4x4 run 1 - [wandb](https://wandb.ai/tum-edu/lvsm/runs/agnj9goq?nw=nwuserkaihelli)
-Filename: `4x4-r1-epoch_96-step_100000.ckpt`
+Filename: `lvsm_vae_4x4_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-r1-epoch_96-step_100000.ckpt lvsm_cfg.patch_size=4 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_epoch_96-step_100000.ckpt lvsm_cfg.patch_size=4 
 ```
 
 **Results:**
@@ -143,10 +143,10 @@ lpips 0.2327174136513158
 ```
 
 ### 4x4 run 200k steps - [wandb](https://wandb.ai/tum-edu/lvsm/runs/gv2in2xr?nw=nwuserkaihelli)
-Filename: `4x4-200k-epoch_193-step_200000.ckpt`
+Filename: `lvsm_vae_4x4_epoch_193-step_200000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-epoch_193-step_200000.ckpt lvsm_cfg.patch_size=4 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_epoch_193-step_200000.ckpt lvsm_cfg.patch_size=4 
 ```
 
 **Results:**
@@ -157,10 +157,10 @@ lpips 0.21688682154605263
 ```
 
 ### 6x6 run 200k steps - multiple wandb runs...
-Filename: `6x6-200k-epoch_193-step_200000.ckpt`
+Filename: `lvsm_vae_6x6_epoch_193-step_200000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/6x6-200k-epoch_193-step_200000.ckpt lvsm_cfg.patch_size=6 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_6x6_epoch_193-step_200000.ckpt lvsm_cfg.patch_size=6 
 ```
 
 **Results:**
@@ -171,17 +171,17 @@ lpips 0.2590075041118421
 ```
 
 ### 4x4 run 200k steps decoder finetuning - [wandb](https://wandb.ai/tum-edu/lvsm/runs/wdgz38ez)
-Description: VAE Decoder is LoRA finetuned starting off from `4x4-200k-epoch_193-step_200000.ckpt`
+Description: VAE Decoder is LoRA finetuned starting off from `lvsm_vae_4x4_epoch_193-step_200000.ckpt`
 
-Filename: `4x4-200k-vae-ft_epoch_18-step_18700.ckpt`
+Filename: `lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 
 ```
 
 ```bash
 # Export videos and images
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json test.compute_scores=false test.save_video=true test.save_image=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt  lvsm_cfg.patch_size=4 test.ffmpeg_path=/home/team15/ffmpeg-7.0.2-amd64-static
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation dataset.view_sampler.index_path=assets/evaluation_index_re10k_video.json test.compute_scores=false test.save_video=true test.save_image=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt  lvsm_cfg.patch_size=4 test.ffmpeg_path=/home/team15/ffmpeg-7.0.2-amd64-static
 ```
 
 **Results:**
@@ -193,13 +193,13 @@ lpips 0.16682514391447367
 
 **Multi-View Experiment:**
 ```bash
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_2.json
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_3.json
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_4.json
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_5.json
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_6.json
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_7.json
-python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-200k-vae-ft_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_8.json
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_2.json
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_3.json
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_4.json
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_5.json
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_6.json
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_7.json
+python -m src.main +experiment=re10k_vae_ft  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_lora_epoch_18-step_18700.ckpt lvsm_cfg.patch_size=4 dataset.view_sampler.index_path=assets/multi_view_experiment/evaluation_index_num_src_8.json
 ```
 
 ```
@@ -210,12 +210,12 @@ lpips_b = [0.24431818181818182, 0.20756392045454544, 0.18087121212121213, 0.1670
 ```
 
 ### 4x4 run only 2 target views - [wandb](https://wandb.ai/tum-edu/lvsm/runs/gupat7c3)
-Description: Finetuned from the 4x4 200k steps model `4x4-200k-epoch_193-step_200000.ckpt`
+Description: Finetuned from the 4x4 200k steps model `lvsm_vae_4x4_epoch_193-step_200000.ckpt`
 
-Filename: `4x4-2views-epoch_96_step_100000.ckpt`
+Filename: `lvsm_vae_4x4_fixed_2views_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/4x4-2views-epoch_96_step_100000.ckpt lvsm_cfg.patch_size=4 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_4x4_fixed_2views_epoch_96-step_100000.ckpt lvsm_cfg.patch_size=4 
 ```
 
 **Results:**
@@ -226,12 +226,12 @@ lpips 0.2021484375
 ```
 
 ### 6x6 run only 2 target views - [wandb](https://wandb.ai/tum-edu/lvsm/runs/h44mlxlp)
-Description: Finetuned from the 6x6 200k steps model `6x6-200k-epoch_193-step_200000.ckpt`
+Description: Finetuned from the 6x6 200k steps model `lvsm_vae_6x6_epoch_193-step_200000.ckpt`
 
-Filename: `6x6-2views-epoch_96_step_100000.ckpt`
+Filename: `lvsm_vae_6x6_fixed_2views_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/6x6-2views-epoch_96_step_100000.ckpt lvsm_cfg.patch_size=6 
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_6x6_fixed_2views_epoch_96-step_100000.ckpt lvsm_cfg.patch_size=6 
 ```
 
 **Results:**
@@ -242,12 +242,12 @@ lpips 0.24691611842105263
 ```
 
 ### 6x6 run finetune stochastic_encoder=False - [wandb](https://wandb.ai/tum-edu/lvsm/runs/h44mlxlp)
-Description: Finetuned from the 6x6 200k steps model `6x6-200k-epoch_193-step_200000.ckpt`
+Description: Finetuned from the 6x6 200k steps model `lvsm_vae_6x6_epoch_193-step_200000.ckpt`
 
-Filename: `6x6-non_stoch-epoch_96_step_100000.ckpt`
+Filename: `lvsm_vae_6x6_non_stoch_enc_epoch_96-step_100000.ckpt`
 
 ```bash
-python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/6x6-non_stoch-epoch_96_step_100000.ckpt lvsm_cfg.patch_size=6 lvsm_cfg.vae_cfg.stochastic_encoder=false
+python -m src.main +experiment=re10k_vae  mode=test dataset/view_sampler=evaluation test.compute_scores=true checkpointing.load=checkpoints/lvsm_vae_6x6_non_stoch_enc_epoch_96-step_100000.ckpt lvsm_cfg.patch_size=6 lvsm_cfg.vae_cfg.stochastic_encoder=false
 ```
 
 **Results:**
