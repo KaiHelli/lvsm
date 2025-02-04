@@ -17,13 +17,17 @@ from ..visualization.layout import add_border, hcat
 @dataclass
 class EvaluationIndexGeneratorCfg:
     num_target_views: int
-    min_distance: int
-    max_distance: int
-    min_overlap: float
-    max_overlap: float
+    min_ctx_distance: int
+    max_ctx_distance: int
+    min_ctx_overlap: float
+    max_ctx_overlap: float
     output_path: Path
     save_previews: bool
     seed: int
+    generator_version: int = 1
+    # Only relevant for generator_version == 2.
+    num_context_views: int = 2
+    min_tgt_to_ctx_distance: int = 1
 
 
 @dataclass
@@ -63,8 +67,8 @@ class EvaluationIndexGenerator(LightningModule):
             # Step away from context view until the minimum overlap threshold is met.
             valid_indices = []
             for step in (1, -1):
-                min_distance = self.cfg.min_distance
-                max_distance = self.cfg.max_distance
+                min_distance = self.cfg.min_ctx_distance
+                max_distance = self.cfg.max_ctx_distance
                 current_index = context_index + step * min_distance
 
                 while 0 <= current_index.item() < v:
@@ -92,8 +96,8 @@ class EvaluationIndexGenerator(LightningModule):
                     overlap = min(overlap_a, overlap_b)
                     delta = (current_index - context_index).abs()
 
-                    min_overlap = self.cfg.min_overlap
-                    max_overlap = self.cfg.max_overlap
+                    min_overlap = self.cfg.min_ctx_overlap
+                    max_overlap = self.cfg.max_ctx_overlap
                     if min_overlap <= overlap <= max_overlap:
                         valid_indices.append((current_index.item(), overlap_a, overlap_b))
 

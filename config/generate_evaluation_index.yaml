@@ -24,11 +24,14 @@ data_loader:
     seed: 3456
 
 index_generator:
+  generator_version: 1 # 2
+  num_context_views: 2
   num_target_views: 3
-  min_overlap: 0.6
-  max_overlap: 1.0
-  min_distance: 45
-  max_distance: 135
+  min_ctx_overlap: 0.6 # 0.3
+  max_ctx_overlap: 1.0
+  min_ctx_distance: 45 # 70
+  max_ctx_distance: 135 # 250
+  min_tgt_to_ctx_distance: 1 # 5
   output_path: outputs/evaluation_index_re10k
   save_previews: false
   seed: 123

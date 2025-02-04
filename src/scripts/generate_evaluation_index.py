@@ -18,6 +18,7 @@ with install_import_hook(
         EvaluationIndexGenerator,
         EvaluationIndexGeneratorCfg,
     )
+    from src.evaluation.evaluation_index_generator_v2 import EvaluationIndexGeneratorV2
     from src.global_cfg import set_cfg
 
 
@@ -40,7 +41,12 @@ def train(cfg_dict: DictConfig):
     torch.manual_seed(cfg.seed)
     trainer = Trainer(max_epochs=1, accelerator="gpu", devices="auto", strategy="auto")
     data_module = DataModule(cfg.dataset, cfg.data_loader, None)
-    evaluation_index_generator = EvaluationIndexGenerator(cfg.index_generator)
+
+    if cfg.index_generator.generator_version == 1:
+        evaluation_index_generator = EvaluationIndexGenerator(cfg.index_generator)
+    else:
+        evaluation_index_generator = EvaluationIndexGeneratorV2(cfg.index_generator)
+
     trainer.test(evaluation_index_generator, datamodule=data_module)
     evaluation_index_generator.save_index()
 
